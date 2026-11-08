@@ -33,32 +33,9 @@ namespace
         { 189, 3976, 80.0f, {} },   // Highlord Mograine
         { 189, 3977, 80.0f, {} },   // Inquisitor Whitemane
 
-        // Scholomance (289): the linked pair Marduk Blackpool / Vectus. They do
-        // not pre-aggro but are wired together in SmartAI (each "On Aggro -> Set
-        // Data 3" and "On Data Set 3 -> Attack Start"), so pulling EITHER pulls
-        // BOTH. They stand ~18yd apart in a chamber of ~32 Scholomance Students;
-        // an AoE that wakes one wakes the pair while the room is still up. The DC
-        // roster collapses the two into ONE boss anchored on Vectus (see
-        // BossRosterRegistry, map 289), so 10432 is the live tracked boss (room
-        // centre, nearest the close trash) and 10433 (Marduk, off the roster) is
-        // listed here ONLY so the room-trash value's partner check excludes it
-        // from being chased as a faction-15 "student". Radius 55 covers the
-        // student room; the RoomClearTimeout valve handles far stragglers.
-        //
-        // CRITICAL: the whole room — students AND the two bosses — stands NEUTRAL
-        // (yellow), not hostile, until struck. An EXPLICIT memberEntries whitelist
-        // is what makes this work: (1) it scopes "the room" to the students alone,
-        // so the unrelated HOSTILE packs that happen to sit within 55yd (Diseased
-        // Ghouls to the east, Plagued Hatchlings to the north, Risen Adepts) are
-        // NOT counted as room trash — without it those hostiles were the only
-        // things the value could see, and as they cleared the count flicked to 0
-        // and the boss was pulled with the students still up; and (2) a non-empty
-        // whitelist signals DungeonClearRoomTrashValue to clear these entries even
-        // though they are neutral (the hostile gate is bypassed for explicit
-        // members only — see that file). Marduk is whitelisted identically so the
-        // partner row behaves the same if it is ever the tracked boss.
-        { 289, 10432, 55.0f, { 10475 } }, // Scholomance — Vectus (tracked boss)
-        { 289, 10433, 55.0f, { 10475 } }, // Scholomance — Marduk Blackpool (partner)
+        // Scholomance (289) has no row: the Marduk / Vectus students are
+        // unattackable props now, so there is no room to clear (see
+        // ScholomanceEvents.cpp).
 
         { 555, 18667, 100.0f, {} }, // Shadow Labyrinth — Blackheart the Inciter
         { 109, 5710,   90.0f, {} }, // Sunken Temple — Jammal'an the Prophet
@@ -97,9 +74,10 @@ namespace
         // THE RADIUS IS NOT READ FROM A SCRIPT HERE, because there is no script to
         // read: Gilnid's whole SmartAI is a Molten Metal cast, an out-of-combat
         // yell, and a door open on death. He force-pulls nothing. This row rests on
-        // the SCHOLOMANCE precedent above — "does not pre-aggro, but the room and
-        // the boss cannot be separated by ordinary means" — and 60yd is the
-        // measured spawn envelope of the foundry, not a script constant.
+        // the same reasoning Scholomance's Marduk & Vectus row used to carry (before
+        // its students became props) — "does not pre-aggro, but the room and the
+        // boss cannot be separated by ordinary means" — and 60yd is the measured
+        // spawn envelope of the foundry, not a script constant.
         //
         // What makes the room undecomposable: 19 ELITES at level 18, against a
         // level-18 party, standing 7.1-57.6yd from Gilnid. At a same-level elite's

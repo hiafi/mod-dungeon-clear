@@ -936,7 +936,8 @@ namespace DcEventDoorRegistry
     // GO state) nor auto-pause on one (there is nothing for a player to come
     // and solve) — it holds where it stands and the door frees it.
     //
-    // Stratholme's two gate traps are the whole list. instance_stratholme's
+    // Stratholme's two gate traps are the original case (Karazhan's Aran door and
+    // Scholomance's encounter gates follow it below). instance_stratholme's
     // Update() watches two floor positions — (3612.3,-3335.4) Scarlet side,
     // (3919.9,-3547.3) undead side — and the instant a non-GM player comes
     // within 5.5yd it slams the matching PAIR of portcullises shut, spawns
@@ -976,6 +977,28 @@ namespace DcEventDoorRegistry
             // locked out whatever it does (the sealed-encounter muster is what
             // prevents that); after a wipe, his Reset reopens it.
             case 184517:  // Karazhan — Private Library Door (Aran's Reset opens it)
+            // --- Scholomance (map 289) — the six classroom gates and Gandling's
+            // entrance gate. The reworked instance script registers all seven as
+            // door data: each instructor's gate shuts when that instructor is
+            // pulled (boss state IN_PROGRESS) and opens on a death, a wipe or an
+            // evade (DONE / NOT_STARTED); the seven also shut for the whole
+            // Gandling fight, and the detention lessons open and shut a classroom
+            // gate by hand. Same shape as Aran's door above: nothing to click (they
+            // are lock-free, startOpen, and IsLockFreeClickable keeps them out on
+            // purpose), nothing for a player to solve, and the hold always ends —
+            // the state that shut a gate is the state whose end opens it. Without
+            // this row a member who is behind a shut gate (a late follower, a
+            // detained student, a rezzed bot) reads it as a corridor blocker and
+            // auto-pauses the whole party mid-fight. The sealed-encounter rows
+            // (SealedEncounterRegistry) keep followers from being left outside in
+            // the first place; this is the net for the ones who still are.
+            case 177371:  // Scholomance — Shadow Vault gate (Illucia)
+            case 177372:  // Scholomance — Vault of the Ravenian gate
+            case 177373:  // Scholomance — Barov Family Vault gate (Alexei)
+            case 177374:  // Scholomance — Gandling's study entrance gate
+            case 177375:  // Scholomance — Coven gate (Malicia)
+            case 177376:  // Scholomance — Hall of Secrets gate (Polkelt)
+            case 177377:  // Scholomance — Hall of the Damned gate (Krastinov)
                 return true;
             default:
                 return false;

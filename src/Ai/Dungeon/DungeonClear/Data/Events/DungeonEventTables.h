@@ -54,7 +54,7 @@ struct DungeonWingLayout;
 // Shared, cross-dungeon activation predicate — external linkage so several
 // dungeon files can pass &DcRoomAggroPreClearCondition to .Conditional().
 // DUE while the room-trash value still has anything to clear (every
-// RoomAggroRegistry boss: SM Cathedral, Scholomance Marduk & Vectus, ...).
+// RoomAggroRegistry boss: SM Cathedral, ...).
 bool DcRoomAggroPreClearCondition(Player* bot, AiObjectContext* context);
 
 // --- event rows (one appender per dungeon) -------------------------------
@@ -69,7 +69,6 @@ void RegisterDeadminesEvents(std::vector<DungeonEvent>& out);
 void RegisterWailingCavernsEvents(std::vector<DungeonEvent>& out);
 void RegisterStratholmeEvents(std::vector<DungeonEvent>& out);
 void RegisterUldamanEvents(std::vector<DungeonEvent>& out);
-void RegisterScholomanceEvents(std::vector<DungeonEvent>& out);
 void RegisterDireMaulEvents(std::vector<DungeonEvent>& out);
 // Hellfire Ramparts (map 543) final-approach gate — see HellfireRampartsEvents.cpp
 // for the measurements. Exposed so t/TestRampartsLedgeProbe can assert against the

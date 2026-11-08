@@ -925,6 +925,55 @@ TEST(BossRosterRegistryTest, ScholomanceMergesMardukAndVectus)
     EXPECT_NE(Find(out, 10506), nullptr);
 }
 
+// The REAL derived Scholomance roster (DungeonEncounter.dbc bits for map 289, the
+// twelve encounters BossSpawnIndex finds a spawn for): Kirtonos (bit 0, 10506) is
+// summoned by the instance script when a player clicks the Brazier of the Herald,
+// so he has no `creature` row and is never in the derived list. The patch leaves
+// him out by design, merges the linked pair into one anchor on Vectus's bit (4),
+// and keeps Gandling (bit 12) last, behind the six instructors (bits 6-11): the
+// reworked instance reveals him on the sixth instructor state, so in clear order he
+// is never the target while still hidden.
+TEST(BossRosterRegistryTest, ScholomanceRealRosterEndsOnGandlingAndSkipsKirtonos)
+{
+    std::vector<DungeonBossInfo> base = {
+        Boss(10503, 1, "Jandice Barov", 289),
+        Boss(11622, 2, "Rattlegore", 289),
+        Boss(10433, 3, "Marduk Blackpool", 289),
+        Boss(10432, 4, "Vectus", 289),
+        Boss(10508, 5, "Ras Frostwhisper", 289),
+        Boss(10505, 6, "Instructor Malicia", 289),
+        Boss(11261, 7, "Doctor Theolen Krastinov", 289),
+        Boss(10901, 8, "Lorekeeper Polkelt", 289),
+        Boss(10507, 9, "The Ravenian", 289),
+        Boss(10504, 10, "Lord Alexei Barov", 289),
+        Boss(10502, 11, "Lady Illucia Barov", 289),
+        Boss(1853, 12, "Darkmaster Gandling", 289),
+    };
+
+    for (Difficulty d : { DUNGEON_DIFFICULTY_NORMAL, DUNGEON_DIFFICULTY_HEROIC })
+    {
+        std::vector<DungeonBossInfo> out =
+            BossRosterRegistry::Apply(289, DcDiffKey::Dungeon(d), base);
+
+        // Twelve derived encounters, the pair merged: eleven anchors.
+        EXPECT_EQ(out.size(), 11u);
+        EXPECT_EQ(Find(out, 10506), nullptr);   // Kirtonos: not in the run
+        EXPECT_EQ(Find(out, 10433), nullptr);   // Marduk: folded into the pair
+
+        DungeonBossInfo const* pair = Find(out, 10432);
+        ASSERT_NE(pair, nullptr);
+        EXPECT_EQ(pair->encounterIndex, 4u);    // Vectus's real kill-bit
+
+        // Gandling is last, and the six instructors sit directly before him.
+        ASSERT_FALSE(out.empty());
+        EXPECT_EQ(out.back().entry, 1853u);
+        EXPECT_EQ(out[out.size() - 2].entry, 10502u);   // Illucia, the last instructor
+        for (DungeonBossInfo const& b : out)
+            if (b.entry != 1853u)
+                EXPECT_LT(BossOrderKey(b), BossOrderKey(out.back())) << b.entry;
+    }
+}
+
 TEST(BossRosterRegistryTest, ResultStaysClearOrdered)
 {
     std::vector<DungeonBossInfo> base = {

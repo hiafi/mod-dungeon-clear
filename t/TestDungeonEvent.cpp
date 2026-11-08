@@ -1593,21 +1593,13 @@ TEST(DungeonEventRoomAggro, ScarletCathedralEventShape)
     EXPECT_EQ(e->steps[0].creatureEntry, 0u);  // room-trash mode
 }
 
-// Scholomance (289) re-uses the same room-aggro pre-clear shape for the merged
-// Marduk & Vectus boss: Conditional(3) + a lone KillCreature(0) room-trash step.
-TEST(DungeonEventRoomAggro, ScholomanceMardukVectusEventShape)
+// Scholomance (289) has no event rows: the Viewing Room students are unattackable
+// props, so the Marduk & Vectus room-aggro pre-clear is gone. Nothing for the
+// clear to click either (the hard mode goobers are human-started).
+TEST(DungeonEventRoomAggro, ScholomanceHasNoEvents)
 {
-    DungeonEvent const* e = DungeonEventRegistry::Find(289, 1);
-    ASSERT_NE(e, nullptr);
-    EXPECT_EQ(e->activation, EventActivation::Conditional);
-    EXPECT_TRUE(static_cast<bool>(e->condition));
-    EXPECT_TRUE(e->required);
-    ASSERT_EQ(e->steps.size(), 1u);
-    EXPECT_EQ(e->steps[0].kind, EventStepKind::KillCreature);
-    EXPECT_EQ(e->steps[0].creatureEntry, 0u);  // room-trash mode
-
-    EXPECT_TRUE(DungeonEventRegistry::IsRoomAggroPreClear(*e));
-    EXPECT_TRUE(DungeonEventRegistry::HasRoomAggroEvent(289));
+    EXPECT_EQ(DungeonEventRegistry::Find(289, 1), nullptr);
+    EXPECT_FALSE(DungeonEventRegistry::HasRoomAggroEvent(289));
 }
 
 // IsRoomAggroPreClear distinguishes the room-trash gate from the step-driven

@@ -70,31 +70,15 @@ TEST(RoomAggroRegistryTest, MultiWingMapIsKeyedByEntry)
     EXPECT_EQ(RoomAggroRegistry::Find(189, 6487), nullptr);  // (some other 189 npc)
 }
 
-// Scholomance's linked pair are both flagged so the room-trash value tracks the
-// room around the live boss (Vectus) AND excludes the off-roster partner
-// (Marduk) from being chased as a faction-15 student. Unlike every other
-// room-aggro boss, their room is scoped to an EXPLICIT whitelist (Scholomance
-// Students, 10475) because the whole chamber stands neutral until struck — the
-// whitelist both keeps unrelated hostile packs out of "the room" and signals the
-// value to clear the neutral students (see DungeonClearRoomTrashValue).
-TEST(RoomAggroRegistryTest, ScholomanceLinkedPairBothFlagged)
+// Scholomance has NO room-aggro row any more. The Marduk / Vectus students
+// (10475) are unattackable props in the reworked dungeon, so there is no room to
+// pre-clear; the linked pair is a plain merged roster boss (see
+// ScholomanceEvents.cpp). Assert it so a re-add is a deliberate choice.
+TEST(RoomAggroRegistryTest, ScholomanceHasNoRoomAggroEntry)
 {
-    RoomAggroBoss const* vectus = RoomAggroRegistry::Find(289, 10432);
-    RoomAggroBoss const* marduk = RoomAggroRegistry::Find(289, 10433);
-    ASSERT_NE(vectus, nullptr);
-    ASSERT_NE(marduk, nullptr);
-    EXPECT_EQ(RoomAggroRegistry::Find(289, 10475), nullptr);  // Student is room, not boss
-
-    // Both rows carry the student-only whitelist.
-    ASSERT_EQ(vectus->memberEntries.size(), 1u);
-    EXPECT_EQ(vectus->memberEntries[0], 10475u);
-    EXPECT_EQ(marduk->memberEntries, vectus->memberEntries);
-
-    // The whitelist scopes the room: a Scholomance Student inside the radius and
-    // outside the boss sphere is room trash; an unrelated hostile pack (e.g. a
-    // Diseased Ghoul, 10495) at the same distance is NOT.
-    EXPECT_TRUE(RoomAggroRegistry::IsRoomTrash(*vectus, 10475, 45.0f, 31.0f));
-    EXPECT_FALSE(RoomAggroRegistry::IsRoomTrash(*vectus, 10495, 45.0f, 31.0f));
+    EXPECT_EQ(RoomAggroRegistry::Find(289, 10432), nullptr);  // Vectus
+    EXPECT_EQ(RoomAggroRegistry::Find(289, 10433), nullptr);  // Marduk Blackpool
+    EXPECT_EQ(RoomAggroRegistry::Find(289, 10475), nullptr);  // Scholomance Student
 }
 
 // Mechano-Lord Capacitus (Mechanar, 554) no longer has a room-aggro entry: the
