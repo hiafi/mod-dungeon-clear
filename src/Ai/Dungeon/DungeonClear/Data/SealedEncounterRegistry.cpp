@@ -221,6 +221,41 @@ namespace
     //
     // approachRadius 86. The door is 75.8yd from Prince; 8/10yd out along the
     // landing are ~84/86yd.
+    // --- Scholomance (289) — the six instructors and Gandling ------------------
+    //
+    // The reworked instance_scholomance registers each classroom gate as door
+    // data tied to its instructor's boss state: it shuts on the pull and opens on
+    // a death, a wipe or an evade. The same six gates and the study's entrance
+    // gate (177374) also shut for the whole Gandling fight. So every one of these
+    // fights seals its room exactly the way Selin's does, and a follower still in
+    // the gate corridor is out until it ends.
+    //
+    // The volumes are the rooms, from the Scholomance navmesh survey (NAVMESH-
+    // REPORT sections 5-11; [navmesh estimate], the mesh sits about 0.5yd inside
+    // every wall), cut at the gate's inner side with a few yards of slack so the
+    // gate corridor and its sill read as outside. Each box holds its boss's spawn
+    // and excludes its own gate (both pinned in t/TestSealedEncounter.cpp).
+    //
+    // Z BANDS, because the rooms are stacked: the Coven (z 85) over the Vault of
+    // the Ravenian (z 75), the Hall of the Damned (z 85) over the Barov Family
+    // Vault (z 72-75, the pit floor reaches z 66), the Hall of Secrets (z 85) over
+    // the Shadow Vault (z 73-75), and the study (z 75.6) between the ring
+    // corridors (z 89) and the history floor (z 115.8). Upper rooms take
+    // [82, 92], lower ones [70, 80] (Alexei's [64, 79] for the pit).
+    //
+    //   Malicia    x 76..146   y -16..14   gate 177375 at x 151.8, 65yd out
+    //   Krastinov  x 158..204  y -104..-38 gate 177377 at y -29.1, 66yd out
+    //   Polkelt    x 216..286  y -26..16   gate 177376 at x 209.1, 66yd out
+    //   Ravenian   x 86..156   y -30..26   gate 177372 at x 159.7, 56yd out
+    //   Alexei     x 165..200  y -97..-32  gate 177373 at y -21.3, 70yd out
+    //   Illucia    x 211..277  y -16..16   gate 177371 at x 204.3, 62yd out
+    //   Gandling   x 160..202  y -22..20   gate 177374 at y 29.0 (z 89, the stair top)
+    //
+    // approachRadius is the boss-to-gate distance plus about 10yd, so the clump
+    // arms in the corridor before the party threads the gate (the Gundrak and
+    // Halls of Stone reasoning); Gandling's 45 reaches the stair top.
+    //
+    // musterSpread 10, the same number and reasoning as the rows above.
     SealedEncounterRow const kRows[] =
     {
         // mapId  boss   minX    maxX    minY    maxY   approach  muster
@@ -232,6 +267,14 @@ namespace
         {   532, 16524, -11195.0f, -11135.0f, -1942.0f, -1886.0f, 50.0f, 10.0f, 225.0f, 245.0f },
         {   532, 15689, -11182.0f, -11058.0f, -1706.0f, -1550.0f, 107.0f, 10.0f, 276.0f, 284.0f },
         {   532, 15690, -11015.0f, -10900.0f, -2040.0f, -1935.0f,  86.0f, 10.0f, 272.0f, 280.0f },
+        // Scholomance: Malicia, Krastinov, Polkelt, Ravenian, Alexei, Illucia, Gandling
+        {   289, 10505,    76.0f,   146.0f,   -16.0f,    14.0f,  75.0f, 10.0f,  82.0f,  92.0f },
+        {   289, 11261,   158.0f,   204.0f,  -104.0f,   -38.0f,  75.0f, 10.0f,  82.0f,  92.0f },
+        {   289, 10901,   216.0f,   286.0f,   -26.0f,    16.0f,  75.0f, 10.0f,  82.0f,  92.0f },
+        {   289, 10507,    86.0f,   156.0f,   -30.0f,    26.0f,  70.0f, 10.0f,  70.0f,  80.0f },
+        {   289, 10504,   165.0f,   200.0f,   -97.0f,   -32.0f,  80.0f, 10.0f,  64.0f,  79.0f },
+        {   289, 10502,   211.0f,   277.0f,   -16.0f,    16.0f,  72.0f, 10.0f,  70.0f,  80.0f },
+        {   289,  1853,   160.0f,   202.0f,   -22.0f,    20.0f,  45.0f, 10.0f,  72.0f,  80.0f },
     };
 }
 

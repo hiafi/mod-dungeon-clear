@@ -186,9 +186,9 @@ GuidVector DungeonClearRoomTrashValue::Calculate()
             }
         }
         // A room with an EXPLICIT member whitelist may stand NEUTRAL (yellow)
-        // until struck — Scholomance's Reanimation chamber (entry 10475) and its
-        // bosses are all non-hostile, so bot->IsHostileTo() is false for the
-        // entire room and the ordinary hostile gate would drop every student,
+        // until struck (Scholomance's Reanimation chamber was the case, before its
+        // students became props) — so bot->IsHostileTo() is false for the
+        // entire room and the ordinary hostile gate would drop every member,
         // leaving the boss to be pulled with the room still up. For an
         // explicitly-listed member, skip the hostile gate: those entries ARE the
         // room by author intent. IsPossibleTarget still runs below and accepts a

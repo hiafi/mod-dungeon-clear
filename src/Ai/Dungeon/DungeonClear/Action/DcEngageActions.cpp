@@ -485,8 +485,15 @@ bool DungeonClearEngageActionBase::EngageDirect(Unit* target)
     // pull is deterministic. Scoped to non-hostile targets only: a "red"-name
     // hostile mob (IsHostileTo, reaction <= REP_HOSTILE) aggros on its own, so
     // we leave its natural pull untouched.
+    //
+    // A CIVILIAN (CREATURE_FLAG_EXTRA_CIVILIAN) is the other exception: it is red
+    // but never aggros on proximity and never calls for help (CanStartAttack
+    // refuses), it only fights once struck. Scholomance's Doctor Theolen Krastinov
+    // is one. The first swing would engage him anyway, but a civilian has no
+    // aggro of its own to fall back on if that swing is late (facing, a stun, the
+    // tank dropping the target), so force the engage the same deterministic way.
     if (Creature* creature = target->ToCreature())
-        if (!bot->IsHostileTo(creature))
+        if (!bot->IsHostileTo(creature) || creature->IsCivilian())
             creature->EngageWithTarget(bot);
     botAI->ChangeEngine(BOT_STATE_COMBAT);
     botAI->SetNextCheckDelay(DC_PB_CONFIG(ReactDelay, reactDelay));

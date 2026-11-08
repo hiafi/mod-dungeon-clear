@@ -477,6 +477,36 @@ TEST(DcDoorPolicyTest, KarazhanGamesmanExitIsScriptOnly)
     EXPECT_FALSE(DcEventDoorRegistry::IsSelfClearing(184277));
 }
 
+// Scholomance's classroom gates. The reworked instance script registers the six
+// gates (177371-177373, 177375-177377) as door data tied to their instructor's
+// boss state — shut on the pull, open on a death, a wipe or an evade — and the
+// same six plus the study's entrance gate (177374) shut for the whole Gandling
+// fight. Lock-free and startOpen, so BotCanOpenDoorLikePlayer must keep refusing
+// them (IsLockFreeClickable stays false), and a member left behind one must hold
+// rather than auto-pause the party (IsSelfClearing).
+TEST(DcDoorPolicyTest, ScholomanceEncounterGatesAreHeldNeverClicked)
+{
+    for (uint32 gate : { 177371u, 177372u, 177373u, 177374u, 177375u, 177376u, 177377u })
+    {
+        EXPECT_TRUE(DcEventDoorRegistry::IsSelfClearing(gate)) << gate;
+        EXPECT_FALSE(DcEventDoorRegistry::IsLockFreeClickable(gate)) << gate;
+        EXPECT_FALSE(DcEventDoorRegistry::IsKeyExempt(gate)) << gate;
+        // Real gates the route can meet: not hidden from navigation, not script-only.
+        EXPECT_FALSE(DcEventDoorRegistry::IsNavigationIgnored(gate)) << gate;
+        EXPECT_FALSE(DcEventDoorRegistry::IsScriptOnly(gate)) << gate;
+    }
+    // The neighbours stay as they were: the plain interior Iron Gates are clicked
+    // open, the Viewing Room Door is opened keyless, and the Kirtonos gate and the
+    // Brazier of the Herald stay out of every list (stock script territory).
+    EXPECT_TRUE(DcEventDoorRegistry::IsLockFreeClickable(175611));
+    EXPECT_FALSE(DcEventDoorRegistry::IsSelfClearing(175611));
+    EXPECT_TRUE(DcEventDoorRegistry::IsKeyExempt(175167));
+    EXPECT_FALSE(DcEventDoorRegistry::IsSelfClearing(175167));
+    EXPECT_FALSE(DcEventDoorRegistry::IsLockFreeClickable(175570));  // Kirtonos gate
+    EXPECT_FALSE(DcEventDoorRegistry::IsSelfClearing(175570));
+    EXPECT_FALSE(DcEventDoorRegistry::IsKeyExempt(175564));          // the brazier
+}
+
 TEST(DcDoorPolicyTest, KarazhanLibraryDoorIsHeldNeverClicked)
 {
     EXPECT_TRUE(DcEventDoorRegistry::IsSelfClearing(184517));

@@ -164,3 +164,110 @@ TEST(SealedEncounterTest, AnubarakArenaIsSealed)
                                                           551.0f, 248.3f, 224.0f));
 }
 
+
+// Scholomance (map 289). The reworked instance registers each classroom gate as
+// door data on its instructor's boss state (shut on the pull, open on a death, a
+// wipe or an evade), plus all six and the study's entrance gate on Gandling. Every
+// one of those fights is therefore a sealed encounter. The boxes are the rooms from
+// the navmesh survey, so the tests pin what the muster depends on: the boss spawn is
+// inside, the gate and its corridor are outside, and the Z band separates the
+// stacked rooms.
+
+namespace
+{
+    uint32 constexpr SCHOLO = 289;
+
+    struct ScholoRoom
+    {
+        char const* name;
+        uint32 boss;
+        float spawnX, spawnY, spawnZ;   // [db] the boss spawn
+        float gateX, gateY, gateZ;      // [db] the gate that shuts on the pull
+        float landX, landY, landZ;      // [db] the room's portal landing (spell_target_position)
+        float lowerRoomZ;               // a point on the room stacked under/over it (z), same x/y
+    };
+
+    // name, boss, spawn xyz, gate xyz, portal landing xyz, a z on the stacked floor
+    ScholoRoom const kRooms[] =
+    {
+        { "Coven (Malicia)",       10505,  86.7f,  -2.0f, 85.3f, 151.8f,  -0.6f, 88.9f,
+          83.3f,  -1.7f, 85.2f, 75.0f },
+        { "Hall of the Damned",    11261, 182.2f, -95.4f, 85.3f, 181.2f, -29.1f, 88.9f,
+          182.4f, -95.8f, 85.2f, 72.5f },
+        { "Hall of Secrets",       10901, 274.9f,   1.3f, 85.3f, 209.1f,   0.0f, 88.9f,
+          274.9f,   1.3f, 85.3f, 74.0f },
+        { "Vault of the Ravenian", 10507, 103.3f,  -1.7f, 75.2f, 159.7f,  -0.8f, 76.2f,
+          103.3f,  -1.7f, 75.2f, 85.0f },
+        { "Barov Family Vault",    10504, 178.7f, -91.0f, 70.9f, 181.1f, -21.3f, 76.1f,
+          179.1f, -91.1f, 71.5f, 85.0f },
+        { "Shadow Vault (Illucia)", 10502, 266.0f,   0.9f, 75.3f, 204.3f,   0.0f, 76.2f,
+          266.8f,   0.9f, 75.2f, 85.0f },
+    };
+}
+
+TEST(DcSealedEncounterTest, ScholomanceInstructorRoomsAreSealedAndHoldTheirBoss)
+{
+    for (ScholoRoom const& r : kRooms)
+    {
+        SealedEncounterRow const* row = SealedEncounterRegistry::Find(SCHOLO, r.boss);
+        ASSERT_NE(row, nullptr) << r.name;
+
+        // The boss and the portal landing are inside the sealed volume...
+        EXPECT_TRUE(SealedEncounterRegistry::InSealedRoom(*row, r.spawnX, r.spawnY, r.spawnZ)) << r.name;
+        EXPECT_TRUE(SealedEncounterRegistry::InSealedRoom(*row, r.landX, r.landY, r.landZ)) << r.name;
+        // ...the gate that shuts is not (a follower in the doorway is still outside)...
+        EXPECT_FALSE(SealedEncounterRegistry::InSealedRoom(*row, r.gateX, r.gateY, r.gateZ)) << r.name;
+        // ...and the room stacked above or below it does not read as inside.
+        EXPECT_FALSE(SealedEncounterRegistry::InSealedRoom(*row, r.spawnX, r.spawnY, r.lowerRoomZ)) << r.name;
+
+        // The clump arms before the gate: the boss-to-gate walk is inside approachRadius.
+        EXPECT_TRUE(SealedEncounterRegistry::InApproachRange(*row, r.gateX, r.gateY, r.gateZ,
+                                                             r.spawnX, r.spawnY, r.spawnZ)) << r.name;
+        EXPECT_GT(row->musterSpread, 6.0f) << r.name;
+        EXPECT_LT(row->musterSpread, 25.0f) << r.name;
+    }
+}
+
+TEST(DcSealedEncounterTest, ScholomanceGandlingSealsTheStudyNotTheCorridors)
+{
+    SealedEncounterRow const* row = SealedEncounterRegistry::Find(SCHOLO, 1853);
+    ASSERT_NE(row, nullptr);
+
+    // The study floor (z 75.6): his spawn, the middle, a portal point on the east wall.
+    EXPECT_TRUE(SealedEncounterRegistry::InSealedRoom(*row, 180.8f, -5.4f, 75.6f));
+    EXPECT_TRUE(SealedEncounterRegistry::InSealedRoom(*row, 181.0f, -0.5f, 75.6f));
+    EXPECT_TRUE(SealedEncounterRegistry::InSealedRoom(*row, 163.5f, -12.0f, 75.6f));
+    EXPECT_TRUE(SealedEncounterRegistry::InSealedRoom(*row, 198.0f, 12.0f, 75.6f));
+
+    // The entrance gate (stair top, z 88.9), the ring corridor (z 89) and the history
+    // floor over the study (z 115.8) are outside.
+    EXPECT_FALSE(SealedEncounterRegistry::InSealedRoom(*row, 179.1f, 29.0f, 88.9f));
+    EXPECT_FALSE(SealedEncounterRegistry::InSealedRoom(*row, 181.0f, 24.0f, 89.0f));
+    EXPECT_FALSE(SealedEncounterRegistry::InSealedRoom(*row, 181.0f, -0.5f, 115.8f));
+
+    // The clump arms on the stair top, before the party steps down.
+    EXPECT_TRUE(SealedEncounterRegistry::InApproachRange(*row, 179.1f, 29.0f, 88.9f,
+                                                         180.8f, -5.4f, 75.6f));
+}
+
+TEST(DcSealedEncounterTest, ScholomanceBoxesDoNotOverlapInOneFloor)
+{
+    // Two sealed rooms that share a floor must not share a box, or a member in one
+    // room would release the other's muster. Rooms on different floors are
+    // separated by their Z band instead.
+    uint32 const bosses[] = { 10505, 11261, 10901, 10507, 10504, 10502, 1853 };
+    for (uint32 a : bosses)
+        for (uint32 b : bosses)
+        {
+            if (a >= b)
+                continue;
+            SealedEncounterRow const* ra = SealedEncounterRegistry::Find(SCHOLO, a);
+            SealedEncounterRow const* rb = SealedEncounterRegistry::Find(SCHOLO, b);
+            ASSERT_NE(ra, nullptr);
+            ASSERT_NE(rb, nullptr);
+            bool const xyOverlap = ra->minX < rb->maxX && rb->minX < ra->maxX &&
+                                   ra->minY < rb->maxY && rb->minY < ra->maxY;
+            bool const zOverlap = ra->minZ < rb->maxZ && rb->minZ < ra->maxZ;
+            EXPECT_FALSE(xyOverlap && zOverlap) << a << " vs " << b;
+        }
+}
