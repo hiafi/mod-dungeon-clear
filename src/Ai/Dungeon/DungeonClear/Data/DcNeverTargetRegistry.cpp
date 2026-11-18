@@ -319,8 +319,8 @@ namespace
         // sets faction 14 on every Grim, Guzzling and Hammered Patron within
         // 100yd — 68 of them, levels 48-52, 12 elite — and on Phalanx. They are
         // aggressive but aggro only by proximity; nothing in the script sends
-        // them at the party. Rocknot's ale run has already opened the Bar Door
-        // behind Phalanx, and Plugger is dragged out through it to die past the
+        // them at the party. Phalanx's death has already opened the Bar Door
+        // (the rework), and Plugger is dragged out through it to die past the
         // door (BossPullbackRegistry), so the party is already outside when
         // they turn and the next roster target (Ambassador Flamelash) leads on
         // from there.

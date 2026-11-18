@@ -5,10 +5,12 @@
 
 #include "gtest/gtest.h"
 
+#include <cmath>
 #include <set>
 #include <string>
 #include <vector>
 
+#include "Ai/Dungeon/DungeonClear/Data/DungeonWingRegistry.h"
 #include "TestRun/DcTestDungeonRegistry.h"
 
 using DcTestDungeonRegistry::All;
@@ -133,31 +135,79 @@ TEST(DcTestDungeonRegistryTest, NumericLookupOnWingSplitMapIsRefused)
     EXPECT_EQ(Find("189"), nullptr);
     // 229 = Blackrock Spire, LBRS + UBRS.
     EXPECT_EQ(Find("229"), nullptr);
-    // 230 = Blackrock Depths, Detention Block + Upper City.
+    // 230 = Blackrock Depths, its four Finder sections.
     EXPECT_EQ(Find("230"), nullptr);
 }
 
 TEST(DcTestDungeonRegistryTest, BlackrockDepthsRowsAreItsWings)
 {
-    Row const* db = Find("brd-db");
-    ASSERT_NE(db, nullptr);
-    EXPECT_EQ(db->mapId, 230u);
-    EXPECT_STREQ(db->wing, "Detention Block");
+    // Section 1 enters at the portal and runs at its boss level (52).
+    Row const* s1 = Find("brd-s1");
+    ASSERT_NE(s1, nullptr);
+    EXPECT_EQ(s1->mapId, 230u);
+    EXPECT_STREQ(s1->wing, "Detention Block");
+    EXPECT_EQ(s1->recommendedLevel, 52u);
 
-    Row const* uc = Find("brd-uc");
-    ASSERT_NE(uc, nullptr);
-    EXPECT_EQ(uc->mapId, 230u);
-    EXPECT_STREQ(uc->wing, "Upper City");
-    // Both wings enter at the one portal, as the dungeon finder sends them.
-    EXPECT_TRUE(uc->x == db->x && uc->y == db->y);
+    // Section 2 enters at its Finder start S2a, north of the Ring of Law and
+    // outside its area trigger, at its boss level (53).
+    Row const* s2 = Find("brd-s2");
+    ASSERT_NE(s2, nullptr);
+    EXPECT_EQ(s2->mapId, 230u);
+    EXPECT_STREQ(s2->wing, "Shadowforge City");
+    EXPECT_EQ(s2->recommendedLevel, 53u);
+    EXPECT_NEAR(s2->x, 595.0f, 0.01f);
+    EXPECT_NEAR(s2->y, -92.0f, 0.01f);
+    EXPECT_NEAR(s2->z, -45.0f, 0.01f);
+    EXPECT_GT(std::hypot(s2->x - 596.432f, s2->y - -188.498f), 40.0f) << "S2a must be well clear of AT 1526";
+    // The Vault is key-gated; a test run of section 2 is handed ONE Dark Keeper
+    // Key so the smoke run exercises it (user ruling 2026-11-17). No other BRD
+    // row hands anything out.
+    EXPECT_EQ(s2->runItemId, 11197u);
+    EXPECT_EQ(s1->runItemId, 0u);
+
+    // Section 3 enters in the East Garrison by the Shadowforge Lock (8yd from
+    // the lever 161460), at its boss level (55).
+    Row const* s3 = Find("brd-s3");
+    ASSERT_NE(s3, nullptr);
+    EXPECT_EQ(s3->mapId, 230u);
+    EXPECT_STREQ(s3->wing, "Manufactory");
+    EXPECT_EQ(s3->recommendedLevel, 55u);
+    EXPECT_NEAR(std::hypot(s3->x - 615.61f, s3->y - -49.78f), 8.6f, 1.0f);
+    EXPECT_EQ(s3->runItemId, 0u);
+
+    // Section 4 enters at S4b on the lower Grim Guzzler floor, at its boss level
+    // (56), with the Lyceum's wider no-progress net.
+    Row const* s4 = Find("brd-s4");
+    ASSERT_NE(s4, nullptr);
+    EXPECT_EQ(s4->mapId, 230u);
+    EXPECT_STREQ(s4->wing, "Imperial Seat");
+    EXPECT_EQ(s4->recommendedLevel, 56u);
+    EXPECT_NEAR(s4->x, 843.8f, 0.01f);
+    EXPECT_NEAR(s4->y, -167.8f, 0.01f);
+    EXPECT_EQ(s4->noProgressS, 900u);
+    EXPECT_EQ(s4->runItemId, 0u);
+
+    // Every row's wing label names a real wing of the layout.
+    for (char const* token : { "brd-s1", "brd-s2", "brd-s3", "brd-s4" })
+        EXPECT_NE(DungeonWingRegistry::FindWing(*DungeonWingRegistry::Get(230), token), nullptr) << token;
+
+    EXPECT_EQ(Find("brd-db") ? std::string(Find("brd-db")->token) : std::string(), "brd-s1")
+        << "the retired stock wing token resolves to section 1";
 }
 
-TEST(DcTestDungeonRegistryTest, RetiredBrdTokenAliasesToTheDetentionBlock)
+TEST(DcTestDungeonRegistryTest, RetiredBrdTokensAliasToTheirSections)
 {
-    EXPECT_STREQ(DcTestDungeonRegistry::AliasTarget("brd"), "brd-db");
+    EXPECT_STREQ(DcTestDungeonRegistry::AliasTarget("brd"), "brd-s1");
+    EXPECT_STREQ(DcTestDungeonRegistry::AliasTarget("brd-db"), "brd-s1");
+    // The stock Upper City (LFG 276, the Lock -> the Emperor) is section 4's
+    // Finder row now; its token follows it.
+    EXPECT_STREQ(DcTestDungeonRegistry::AliasTarget("brd-uc"), "brd-s4");
     Row const* row = Find("brd");
     ASSERT_NE(row, nullptr);
-    EXPECT_STREQ(row->token, "brd-db");
+    EXPECT_STREQ(row->token, "brd-s1");
+    row = Find("brd-uc");
+    ASSERT_NE(row, nullptr);
+    EXPECT_STREQ(row->token, "brd-s4");
 }
 
 TEST(DcTestDungeonRegistryTest, BlackrockSpireRowsAreItsWings)

@@ -127,6 +127,14 @@ namespace DcTestDungeonRegistry
         // other run's.
         std::uint32_t overallTimeoutS = 0;
         std::uint32_t noProgressS = 0;
+
+        // An item the harness hands the run's tank once, just before `dc on`,
+        // unless someone in the party already carries one; 0 = none. For a
+        // player-gated event a smoke run should still exercise: Blackrock
+        // Depths' Vault is opened with a Dark Keeper Key (a 5% drop), so its
+        // section 2 row carries one (user ruling 2026-11-17). Test runs only —
+        // a live bot group stays key-gated like players.
+        std::uint32_t runItemId = 0;
     };
 
     inline bool IsScenario(Row const& row) { return row.scenarioOf != nullptr; }
@@ -145,7 +153,9 @@ namespace DcTestDungeonRegistry
     // Retired tokens that still resolve, so old commands, saved soak pools, test
     // plans and queued streamcast requests keep working: `brs` (Blackrock Spire
     // before the LBRS/UBRS split) -> `lbrs`, `brd` (Blackrock Depths before the
-    // Detention Block/Upper City split) -> `brd-db`. Published in the sidecar as
+    // Detention Block/Upper City split) and `brd-db` (the stock Detention Block,
+    // before the Finder sections) -> `brd-s1`, `brd-uc` (the stock Upper City)
+    // -> `brd-s4`. Published in the sidecar as
     // "aliases" so the Test Deck and streamcast can normalise stored tokens.
     struct Alias
     {

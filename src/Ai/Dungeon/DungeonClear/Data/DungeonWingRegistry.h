@@ -78,6 +78,10 @@ struct DungeonWing
     // their kill still sets a bit). Scopes the test harness's kill count and
     // stale-instance guard to the wing. 0 = not authored (count every bit).
     uint32 encounterMask{0};
+
+    // The HEROIC Finder entry for the same wing (a separate LFGDungeons row with
+    // the same start and last boss); 0 = none. WingForLfgDungeon matches either.
+    uint32 lfgHeroicDungeonId{0};
 };
 
 enum class WingSelect : uint8
@@ -113,7 +117,8 @@ public:
     // The wing whose token (case-insensitive) or name equals `key`, or nullptr.
     static DungeonWing const* FindWing(DungeonWingLayout const& layout, std::string const& key);
 
-    // The wing of `mapId` queued for by LFG dungeon `lfgDungeonId`, or nullptr.
+    // The wing of `mapId` queued for by LFG dungeon `lfgDungeonId` (its normal
+    // or its heroic Finder entry), or nullptr.
     static DungeonWing const* WingForLfgDungeon(uint32 mapId, uint32 lfgDungeonId);
 
     // The wing owning `bossEntry` on `mapId`, or nullptr.

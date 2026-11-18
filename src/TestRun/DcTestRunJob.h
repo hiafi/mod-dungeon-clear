@@ -423,6 +423,10 @@ private:
     // Copied off the registry row at InitIdentity so the job never holds a
     // pointer into the catalogue.
     bool _isScenario = false;
+    // The row's runItemId (0 = none): handed to the tank once, before `dc on`,
+    // unless a member already carries one. See GrantRunItem.
+    uint32 _runItemId = 0;
+    void GrantRunItem(Player* tank);
     std::vector<uint32> _focus;             // roster entries the run is scoped to
     DcTestDungeonRegistry::SuccessPredicate _success;
     uint32 _successGraceMs = 0;
@@ -430,7 +434,7 @@ private:
     DcTestRun::ScenarioGrace _grace;
 
     // --- run wing (Blackrock Spire/Depths: a map whose wing is chosen per run) -
-    // The row's wing token when its map picks wings explicitly ("lbrs", "brd-uc"),
+    // The row's wing token when its map picks wings explicitly ("lbrs", "brd-s4"),
     // "" otherwise. Latched on the tank before the roster is read, so the roster,
     // bossesTotal and the run all see only that wing. `_wingMask` is the wing's
     // DungeonEncounter bits (0 = count every bit): it scopes the kill count and

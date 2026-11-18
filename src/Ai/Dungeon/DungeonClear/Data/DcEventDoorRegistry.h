@@ -327,15 +327,15 @@ namespace DcEventDoorRegistry
             // loosely, so nobody walks past Chess to Prince.
             case 184277:  // Karazhan — Gamesman's Hall Exit Door (opens on Chess DONE)
             // Blackrock Depths (map 230) — the Bar Door (170571, lock 739, the
-            // Grim Guzzler Key). npc_rocknot breaks it to state 2 with his last
-            // kick; 7s later Phalanx is woken and runs to it, turning hostile
-            // when he arrives, and TYPE_BAR goes DONE. A click that
-            // opened it early would let the party walk out past a Phalanx who is
-            // still faction 35 — unattackable, and blocking his own credit. The
-            // key-item lock already refuses a bot without the key (only a
-            // pickpocketed Plugger drops it); this row keeps it refused if that
-            // ever changes. Map-230 event 5 owns it.
-            case 170571:  // Blackrock Depths — Bar Door (opens at the end of Rocknot's ale run)
+            // Grim Guzzler Key). The reworked instance opens it when Phalanx
+            // dies (his slot 12 DONE; npc_rocknot's ale run still blasts it to
+            // state 2 first when a player runs it). A click that opened it early
+            // would let the party walk out past a Phalanx who is still faction
+            // 35 — unattackable, and blocking his own credit. The key-item lock
+            // already refuses a bot without the key (only a pickpocketed Plugger
+            // drops it); this row keeps it refused if that ever changes. Map-230
+            // event 5 (Phalanx's challenge) and the Phalanx row own it.
+            case 170571:  // Blackrock Depths — Bar Door (opens on Phalanx's death)
             // The Summoner's Tomb doors, both empty-lock-85 and both driven only by
             // instance_blackrock_depths' TYPE_TOMB_OF_SEVEN: IN_PROGRESS shuts both,
             // DONE opens both, a reset reopens the entrance. 170576 spawns open, so

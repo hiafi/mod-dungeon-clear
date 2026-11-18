@@ -100,7 +100,7 @@ namespace DcHellfireRamparts
     constexpr float FINAL_APPROACH_MIN_Z = 76.0f;
 }
 
-// Blackrock Depths (map 230) — the Upper City numbers BlackrockDepthsEvents.cpp's
+// Blackrock Depths (map 230) — the numbers BlackrockDepthsEvents.cpp's
 // events, hooks and roster patch share with the gtests (t/TestDungeonEvent,
 // t/TestBlackrockDepthsRouteProbe). The reasoning for each is in that file.
 namespace DcBlackrockDepths
@@ -115,58 +115,216 @@ namespace DcBlackrockDepths
     constexpr uint32 STATE_DONE = 3;
     constexpr uint32 STATE_SPECIAL = 4;
 
+    // --- the reworked dungeon: the four Finder sections -------------------
+    // The Blackrock Depths rework (mod-dungeon-bosses, BlackrockDepthsRework.h)
+    // re-implements instance_blackrock_depths under its stock name: every stock
+    // TYPE_* value and door state DC reads keeps its meaning, and it adds 24
+    // boss slots (0-18 = the DungeonEncounter bits, 19 = the Vault). The Finder
+    // splits the map into four runs, each with its own start and last boss:
+    //   1 Detention Block  (LFG 30,  heroic 310): the entrance -> the Ring of Law
+    //   2 Shadowforge City (LFG 308, heroic 311): S2a -> Bael'Gar
+    //   3 Manufactory      (LFG 309, heroic 312): the Shadowforge Lock -> Argelmach
+    //   4 Imperial Seat    (LFG 276, heroic 313): S4b -> the Emperor
+    // Each section is a wing: "brd-s1" .. "brd-s4" (the stock "Upper City" wing
+    // "brd-uc", the Shadowforge Lock -> the Emperor from the portal, is retired).
+    constexpr uint32 TYPE_RING_OF_LAW = 1;
+    constexpr uint32 TYPE_VAULT = 2;
+    // The rework's boss slots DC reads (GetBossState: authored from the rework
+    // header, never reused from a DBC bit). Slot 7 is Fineous's tracking slot:
+    // his server credit row (instance_encounters 234) is deleted, so his kill
+    // sets no bit and the slot is the only record of it.
+    constexpr int32 SLOT_STILGISS_VEREK = 6;    // DONE once both warders are dead
+    constexpr int32 SLOT_FINEOUS = 7;
+    // Ribbly Screwspigot and Plugger Spazzring lost their credit rows too
+    // (instance_encounters 240 / 241 deleted): their kills set no bit, and the
+    // rework records each in its own tracking slot (written by the instance on
+    // the death, both being SmartAI).
+    constexpr int32 SLOT_RIBBLY = 13;
+    constexpr int32 SLOT_PLUGGER = 14;
+
+    constexpr uint32 LFG_SECTION_1 = 30;
+    constexpr uint32 LFG_SECTION_1_HEROIC = 310;
+    constexpr uint32 LFG_SECTION_2 = 308;
+    constexpr uint32 LFG_SECTION_2_HEROIC = 311;
+    constexpr uint32 LFG_SECTION_3 = 309;
+    constexpr uint32 LFG_SECTION_3_HEROIC = 312;
+    constexpr uint32 LFG_SECTION_4 = 276;           // the stock "Upper City" row, start moved to S4b
+    constexpr uint32 LFG_SECTION_4_HEROIC = 313;
+
+    // DungeonEncounter bits each section's run counts. Section 1: Gerstahn 0,
+    // Roccor 1, Grebmar 2, the Ring 3. Section 2: Loregrain 4, Incendius 5,
+    // Stilgiss and Verek 6, Bael'Gar 8, and NOT Fineous 7 (no credit row, so the
+    // bit never sets on a reworked server). Section 3: Angerforge 9, Argelmach
+    // 10. Section 4: Hurley 11, Phalanx 12, Flamelash 15, the Seven 16 (credit
+    // Anger'rel), Magmus 17, the Emperor 18, and NOT Ribbly 13 or Plugger 14
+    // (no credit rows either).
+    constexpr uint32 SECTION_1_ENCOUNTER_MASK = 0x0000Fu;
+    constexpr uint32 SECTION_2_ENCOUNTER_MASK = 0x00170u;
+    constexpr uint32 SECTION_3_ENCOUNTER_MASK = 0x00600u;
+    constexpr uint32 SECTION_4_ENCOUNTER_MASK = 0x79800u;
+
+    // Section 2's Finder start S2a (lfg_dungeon_template 308; the rework's
+    // kSections): the open table hall 55yd north of the Ring's north gate,
+    // outside area trigger 1526.
+    constexpr float S2_START_X = 595.0f;
+    constexpr float S2_START_Y = -92.0f;
+    constexpr float S2_START_Z = -45.0f;
+    constexpr float S2_START_O = 1.89f;
+
+    // Section 3's Finder start (lfg_dungeon_template 309): the East Garrison,
+    // 8yd from the Shadowforge Lock lever 161460 and facing it. The group pulls
+    // the lever itself (event 2), which is also the wing's first objective.
+    constexpr float S3_START_X = 607.2f;
+    constexpr float S3_START_Y = -47.8f;
+    constexpr float S3_START_Z = -59.8f;
+    constexpr float S3_START_O = 6.05f;
+
+    // Section 4's Finder start S4b (lfg_dungeon_template 276, moved from the
+    // portal): the lower Grim Guzzler floor, 36-47yd from Hurley, Ribbly and
+    // Plugger, facing the Bar Door.
+    constexpr float S4_START_X = 843.8f;
+    constexpr float S4_START_Y = -167.8f;
+    constexpr float S4_START_Z = -49.7f;
+    constexpr float S4_START_O = 4.64f;
+
+    constexpr uint32 NPC_GRIMSTONE = 10096;     // the Ring's credit (summoned)
+    constexpr uint32 NPC_GERSTAHN = 9018;
+    constexpr uint32 NPC_ROCCOR = 9025;
+    constexpr uint32 NPC_GREBMAR = 9319;
+    constexpr uint32 NPC_LOREGRAIN = 9024;
+    constexpr uint32 NPC_INCENDIUS = 9017;
+    constexpr uint32 NPC_STILGISS = 9041;
+    constexpr uint32 NPC_FINEOUS = 9056;
+    constexpr uint32 NPC_BAELGAR = 9016;
+    constexpr uint32 NPC_ANGERFORGE = 9033;
+    constexpr uint32 NPC_ARGELMACH = 8983;
+    constexpr uint32 NPC_FLAMELASH = 9156;
+    constexpr uint32 NPC_ANGERREL = 9035;       // the Seven's credit
+    constexpr uint32 NPC_EMPEROR = 9019;
+    // Spawn points (creature table), the anchors the roster patch re-adds.
+    constexpr float STILGISS_X = 823.4f;
+    constexpr float STILGISS_Y = -342.3f;
+    constexpr float STILGISS_Z = -50.1f;
+    constexpr float FINEOUS_X = 963.3f;
+    constexpr float FINEOUS_Y = -343.7f;
+    constexpr float FINEOUS_Z = -71.7f;
+
+    // The Ring of Law (event 1) holds until TYPE_RING_OF_LAW reads DONE. The
+    // rework credits it after the SECOND champion (or after the Encore, when a
+    // player lit the heroic hard mode): an opener wave, two champions and their
+    // gaps are ~2.5 minutes at the design DPS, the Encore adds Theldren's team,
+    // and a wipe resets the whole trial and puts the banner out (user ruling
+    // 2026-11-17), so the rerun ends on the normal champion finish; DC never
+    // lights the banner itself. 15 minutes covers a wipe and a rerun.
+    constexpr uint32 RING_TIMEOUT_MS = 900000;
+
+    // --- the Vault (event 9) ----------------------------------------------
+    // Optional, and key-gated as for a player: the reworked Vault starts when
+    // the Dark Coffer door 174565 (lock 659, the Dark Keeper Key) is opened
+    // after Warder Stilgiss and Verek are both dead. Its gossip tells the
+    // instance (SetData 57); a wipe puts TYPE_VAULT back to NOT_STARTED, and
+    // the opened coffer's gossip starts it again. See RunTheVault. A headless
+    // `.dc test` run of section 2 is handed one key by the harness (the brd-s2
+    // row's runItemId, user ruling 2026-11-17) so smoke runs exercise the
+    // Vault; a live bot group carries one only if it looted one.
+    constexpr uint32 EVENT_VAULT = 9;
+    constexpr uint32 OBJ_VAULT = 9;
+    constexpr uint32 HOOK_RUN_THE_VAULT = 66;
+    constexpr uint32 GO_DARK_COFFER_DOOR = 174565;
+    // Never used up by opening the coffer: the instance consumes one when the
+    // Vault COMPLETES (user ruling 2026-11-17). A human's key is the human's to
+    // use: DC waits for them to open the coffer (RunTheVault).
+    constexpr uint32 ITEM_DARK_KEEPER_KEY = 11197;
+    // The warders: Verek is not a roster boss (Stilgiss carries the pair's
+    // credit, DungeonEncounter bit 6); either one alive near the Vault means
+    // the warders' fight has not settled yet (evaded, leashed).
+    constexpr uint32 NPC_VEREK = 9042;
+    constexpr uint32 STILGISS_ENCOUNTER_BIT = 6;
+    // The room: centre (the stock VaultWarderCenter), floor z, rim at 12-18yd.
+    constexpr float VAULT_CENTER_X = 813.5f;
+    constexpr float VAULT_CENTER_Y = -348.0f;
+    constexpr float VAULT_FLOOR_Z = -50.4f;
+    // Where the tank stands: 10yd out from the centre toward the coffer (which
+    // is at (804.3, -356.1), 12.4yd out on the rim), 2.3yd in front of it.
+    constexpr float VAULT_HOLD_X = 806.0f;
+    constexpr float VAULT_HOLD_Y = -354.6f;
+    constexpr float VAULT_HOLD_RADIUS = 4.0f;
+    // Muster: every member alive and inside the rim, on the Vault's floor,
+    // before the coffer starts the lockdown on the entrance (11.4yd out).
+    // Bounded: past the wait the coffer is opened anyway. The wait is timed
+    // from the moment the leader is back inside the rim with the coffer in
+    // the grid and the Vault NOT_STARTED (DcBrdVault::NextMusterStamp), so the
+    // corpse run after a wipe never uses it up.
+    constexpr float VAULT_MUSTER_RADIUS = 12.0f;
+    constexpr float VAULT_MUSTER_ZBAND = 6.0f;
+    constexpr uint32 VAULT_MUSTER_WAIT_MS = 30000;
+    // A key holder this close to the coffer opens it (the brazier reach).
+    constexpr float VAULT_KEY_REACH = 10.0f;
+    constexpr float VAULT_COFFER_SCAN = 40.0f;
+    constexpr uint32 VAULT_COFFER_USE_FLOOR_MS = 3000;
+    // The time the party may spend BETWEEN attempts (the run back after a
+    // wipe, the muster, waiting for a key): the step clock is re-stamped while
+    // an attempt is live, so a fight never burns it. Past it the optional
+    // event is skipped and the clear goes on. A party that keeps losing gives
+    // up after VAULT_MAX_ATTEMPTS attempts DC started.
+    constexpr uint32 VAULT_TIMEOUT_MS = 420000;
+    constexpr uint32 VAULT_MAX_ATTEMPTS = 3;
+    // One attempt may hold the step clock this long at most (a sentinel kept
+    // in combat by a stuck unit keeps TYPE_VAULT IN_PROGRESS forever). Past it
+    // the re-stamp stops and VAULT_TIMEOUT_MS later the optional event is
+    // skipped. The executor's no-progress watchdog is never re-stamped here.
+    constexpr uint32 VAULT_ATTEMPT_LIVE_CAP_MS = 600000;
+
     // Event ids (map-230 latch keys) and the roster objective sequence numbers
     // (OBJ(n)) that carry them. Events 1/2 (Ring of Law, Shadowforge Lock) are
     // older and keep their inline literals.
     constexpr uint32 EVENT_HURLEY_KEGS = 3;
     constexpr uint32 EVENT_RIBBLY = 4;
-    constexpr uint32 EVENT_ROCKNOT = 5;
+    constexpr uint32 EVENT_PHALANX_CHALLENGE = 5;
     constexpr uint32 OBJ_HURLEY_KEGS = 3;
     constexpr uint32 OBJ_RIBBLY = 4;
-    constexpr uint32 OBJ_ROCKNOT = 5;
+    constexpr uint32 OBJ_PHALANX_CHALLENGE = 5;
 
-    // ObjectiveHookRegistry ids (one flat space across every dungeon).
-    constexpr uint32 HOOK_START_ROCKNOT_ALE_RUN = 47;
+    // ObjectiveHookRegistry ids (one flat space across every dungeon). 47 and
+    // 54 were Rocknot's ale run (the stock way to open the bar), retired with it.
     constexpr uint32 HOOK_WAKE_HURLEY = 52;
-    constexpr uint32 HOOK_BUY_ROCKNOT_ALE = 54;
-    constexpr uint32 HOOK_PHALANX_AT_DOOR = 55;
+    constexpr uint32 HOOK_CHALLENGE_PHALANX = 55;
 
     constexpr uint32 NPC_HURLEY = 9537;
     constexpr uint32 NPC_PHALANX = 9502;
-    constexpr uint32 NPC_ROCKNOT = 9503;
     constexpr uint32 NPC_RIBBLY = 9543;
     constexpr uint32 NPC_PLUGGER = 9499;
     constexpr uint32 GO_THUNDERBREW_KEG = 164911;
     constexpr uint32 GO_BAR_DOOR = 170571;
-    constexpr uint32 QUEST_ALE = 4295;   // Rocknot's "Dark Iron Ale" turn-in
-    constexpr uint32 ITEM_DARK_IRON_ALE_MUG = 11325;  // Plugger sells them, 4295 takes two
-    // Three turn-ins of two mugs start Rocknot's walk (BarAleCount == 3).
-    constexpr uint32 ALE_TURN_INS = 3;
-    constexpr uint32 ALE_MUGS_PER_TURN_IN = 2;
 
     // Between the three Thunderbrew Lager Kegs, on the lower bar floor.
     constexpr float KEG_X = 916.7f;
     constexpr float KEG_Y = -150.2f;
     constexpr float KEG_Z = -49.76f;
 
-    // Rocknot's hold: on the upper bar floor between his walk to the keg
-    // (script_waypoint 9503, y -186..-198) and the Bar Door / Phalanx (y -225..-229),
-    // off both. Probed in t/TestBlackrockDepthsRouteProbe.
-    constexpr float ROCKNOT_HOLD_X = 878.0f;
-    constexpr float ROCKNOT_HOLD_Y = -211.0f;
-    constexpr float ROCKNOT_HOLD_Z = -43.7f;
-    constexpr float ROCKNOT_HOLD_RADIUS = 6.0f;
+    // Ribbly's spawn [db], where his challenge objective is anchored.
+    constexpr float RIBBLY_X = 878.47f;
+    constexpr float RIBBLY_Y = -167.73f;
+    constexpr float RIBBLY_Z = -49.68f;
 
-    // Where the ale is bought. Plugger patrols BEHIND his counter (path 477030,
-    // no delays, a ~10s loop) and the customer side only comes within trading
-    // range at the counter's west end, where he turns at (878.1,-179.5). Probed
-    // in t/TestBlackrockDepthsRouteProbe (PluggerIsReachableAcrossHisCounter).
-    constexpr float PLUGGER_STAND_X = 877.0f;
-    constexpr float PLUGGER_STAND_Y = -180.0f;
-    constexpr float PLUGGER_STAND_Z = -43.53f;
+    // Phalanx's challenge (event 5). The rework gives the dormant golem a gossip
+    // (menu 2283, option 0, npc_phalanx_rework::sGossipSelect): it starts the
+    // same walk to the Bar Door Rocknot's ale run and Plugger's death start,
+    // and he turns hostile when he gets there. The gossip flag drops once he is
+    // woken, by any of the three. His death (slot 12 DONE) opens the Bar Door.
+    // His corner [db: the spawn] is where the objective is anchored.
+    constexpr float PHALANX_SPAWN_X = 847.8f;
+    constexpr float PHALANX_SPAWN_Y = -230.1f;
+    constexpr float PHALANX_SPAWN_Z = -43.6f;
+    constexpr uint32 PHALANX_GOSSIP_OPTION = 0;
+    // The interaction reach the gossip is driven from (the core's 5yd, less a
+    // margin), and how long the walk to the door may take: the 15s watchdog
+    // on his own walk, and slack.
+    constexpr float PHALANX_GOSSIP_REACH = 4.0f;
+    constexpr uint32 PHALANX_CHALLENGE_TIMEOUT_MS = 90000;
 
     // Phalanx's guard spot in the Bar Door: the end of his wake-up run (path
-    // 95020), where npc_phalanx turns him hostile.
+    // 95020), where he turns hostile.
     constexpr float PHALANX_DOOR_X = 867.295f;
     constexpr float PHALANX_DOOR_Y = -222.645f;
 
@@ -193,8 +351,9 @@ namespace DcBlackrockDepths
     constexpr uint32 GO_TOMB_EXIT = 170577;
 
     // The garrison: Doom'rel's upper tier, a few yards in front of him and off
-    // the exit door. Every ghost wakes by SelectNearestPlayer(130) from its own
-    // spawn, and this spot is inside 130yd of all six; it is also 90+yd from the
+    // the exit door. The stock ghosts woke by SelectNearestPlayer(130) from their
+    // own spawns, and this spot is inside 130yd of all six; the reworked Seven
+    // all join the fight at Doom'rel's gossip (zone-wide). It is 90+yd from the
     // entrance door, so a member mustered on it is inside the tomb when the
     // gossip closes both doors. Probed in t/TestBlackrockDepthsRouteProbe.
     constexpr float TOMB_HOLD_X = 1268.0f;
@@ -205,10 +364,14 @@ namespace DcBlackrockDepths
     // floors) before the gossip that seals the doors.
     constexpr float TOMB_MUSTER_RADIUS = 25.0f;
     constexpr float TOMB_MUSTER_ZBAND = 12.0f;
-    // The core's wake range (instance_blackrock_depths::TombOfSevenEvent).
+    // The stock wake range (instance_blackrock_depths::TombOfSevenEvent).
     constexpr float TOMB_WAKE_RANGE = 130.0f;
+    // How far the reset watch looks for a ghost still walking home after a
+    // wipe: the whole tomb from the hold.
+    constexpr float TOMB_GHOST_SCAN = 150.0f;
 
-    // The six ghosts the instance wakes before Doom'rel, in wake order.
+    // The other six of the Seven, in the stock wake order (the rework raises
+    // them in its own rotation, Anger'rel first).
     struct TombGhost { uint32 entry; float x, y, z; };
     constexpr TombGhost TOMB_GHOSTS[] = {
         { 9035, 1215.05f, -220.66f, -85.59f },   // Anger'rel (encounter credit, bit 16)
@@ -315,76 +478,17 @@ namespace DcBlackrockDepths
     constexpr uint32 TORCH_WAIT_MS = 330000;
 
     // --- the Iron Hall (Magmus) -------------------------------------------
-    // mod-individual-progression replaces the six C++ Ironhand Guardians (8982)
-    // with SmartAI 108982s that cast Gout of Flame (15529 -> 15538 every second,
-    // TARGET_UNIT_SRC_AREA_ENEMY, 30yd CIRCLE around the guardian) for as long as
-    // they exist — deliberately (IP PR #890). DC fights around it: hazard rows
-    // keep camps and follower slots out of the circles, a fight-in-place zone
-    // keeps the tank from dragging Magmus out of the gap he spawns in, and the
-    // safe-spot hop (below) keeps every member from stopping in the fire.
+    // The reworked hall does not burn: the six Ironhand Guardians (8982) only
+    // turn, glow and breathe as the looks of Magmus's Crossfire and Flame Wall,
+    // whose lanes and strips are mod-boss-mechanics registry shapes. The stock
+    // Gout of Flame rings, and the safe-spot hop DC ran against them, are gone.
+    // Magmus is still fought where he spawns (FightInPlaceRegistry: the hall
+    // between the Golem doors and the throne door holds nothing else to pull).
     constexpr uint32 NPC_MAGMUS = 9938;
-    constexpr uint32 NPC_IRONHAND_GUARDIAN = 8982;      // stock AC
-    constexpr uint32 NPC_IRONHAND_GUARDIAN_IP = 108982; // mod-individual-progression
     constexpr uint32 GO_THRONE_DOOR = 170575;
-    constexpr float IRONHAND_FIRE_RADIUS = 30.0f;       // spell 15538's radius
-    struct HallPoint { float x, y; };
-    constexpr HallPoint IRONHAND_GUARDIANS[] = {
-        { 1407.29f, -587.30f }, { 1353.43f, -587.32f },
-        { 1406.88f, -632.44f }, { 1353.92f, -632.75f },
-        { 1407.67f, -677.72f }, { 1353.16f, -677.38f },
-    };
     constexpr float MAGMUS_X = 1380.72f;
     constexpr float MAGMUS_Y = -659.31f;
     constexpr float MAGMUS_Z = -91.97f;
-    // The fire-free gap Magmus spawns in, measured against the six circles: a
-    // diamond ~14yd across (x) by ~17yd long (y) centred on (1380.5, -655.5).
-    // These are its four tips pulled in by a yard, i.e. points the party can
-    // stand on with nothing landing on them. (The plan's band rectangle, x
-    // 1372-1388 by y -648..-663, does NOT fit: its corners are 23-24yd from the
-    // nearest guardians.)
-    constexpr HallPoint IRON_HALL_SAFE[] = {
-        { 1380.5f, -647.8f }, { 1380.5f, -663.6f },   // north / south tips
-        { 1374.7f, -655.5f }, { 1386.5f, -655.5f },   // west / east tips
-    };
-    // Fight-in-place zone: the hall between the Golem doors (y -555.9) and the
-    // throne door (y -710.5), wall to wall.
-    constexpr float IRON_HALL_MIN_X = 1340.0f;
-    constexpr float IRON_HALL_MAX_X = 1420.0f;
-    constexpr float IRON_HALL_MIN_Y = -705.0f;
-    constexpr float IRON_HALL_MAX_Y = -562.0f;
-
-    // The safe-spot hop (DcIronHall, DungeonClearIronHallSafeSpot). A member may
-    // walk through the fire but never STOP in it, so the hall is a chain of four
-    // stopping places on the centre line, each a fire-free gap between the
-    // statue bands: north by the Golem doors, gap 1, gap 2 (Magmus), south by
-    // the throne door.
-    //
-    // "In the fire" is 32yd, not the raw 30: AC's area search measures to the
-    // target's edge (IsWithinDist adds the unit's ~1.5yd reach), and half a yard
-    // more covers drift. Every slot below sits at >= 33yd from every statue, so a
-    // bot that arrives is a yard clear of the test that sent it — it cannot
-    // re-fire on landing.
-    constexpr float IRON_HALL_FIRE_KEEPOUT = 32.0f;
-    // The hop's box: the fight-in-place box widened to the doors on both ends,
-    // since the north and south stops stand past its y edges.
-    constexpr float IRON_HALL_HOP_MIN_Y = -712.0f;
-    constexpr float IRON_HALL_HOP_MAX_Y = -554.0f;
-    constexpr float IRON_HALL_HOP_MIN_Z = -100.0f;
-    constexpr float IRON_HALL_HOP_MAX_Z = -84.0f;
-    constexpr float IRON_HALL_FLOOR_Z = -91.97f;
-    constexpr uint32 IRON_HALL_ZONE_COUNT = 4;
-    constexpr HallPoint IRON_HALL_ZONES[IRON_HALL_ZONE_COUNT] = {
-        { 1380.5f, -562.5f },   // north, by the Golem doors
-        { 1380.3f, -609.7f },   // gap 1
-        { 1380.6f, -655.5f },   // gap 2, Magmus's
-        { 1380.5f, -702.0f },   // south, by the throne door
-    };
-    // Five slots per stop, so a party does not stack on one point. The gaps are
-    // diamonds ~8yd across by ~10 long at 32yd, so the slots are a 2.5yd cross.
-    constexpr uint32 IRON_HALL_SLOT_COUNT = 5;
-    constexpr HallPoint IRON_HALL_SLOT_OFFSETS[IRON_HALL_SLOT_COUNT] = {
-        { 0.0f, 0.0f }, { 2.5f, 0.0f }, { -2.5f, 0.0f }, { 0.0f, 2.5f }, { 0.0f, -2.5f },
-    };
 }
 
 // Upper Blackrock Spire (map 229) — the numbers BlackrockSpireEvents.cpp's events,
@@ -5970,7 +6074,8 @@ void RegisterMaraudonWings(std::unordered_map<uint32, DungeonWingLayout>& store)
 // Blackrock Spire (229) — LBRS / UBRS, chosen per run (WingSelect::Explicit).
 // Lives in BlackrockSpireEvents.cpp beside UBRS's events and roster patch.
 void RegisterBlackrockSpireWings(std::unordered_map<uint32, DungeonWingLayout>& store);
-// Blackrock Depths (230) — Detention Block / Upper City, chosen per run.
+// Blackrock Depths (230) — the four Finder sections (brd-s1 to brd-s4), chosen
+// per run.
 void RegisterBlackrockDepthsWings(std::unordered_map<uint32, DungeonWingLayout>& store);
 
 // --- anchor routes (one appender per dungeon that hand-authors a route) ---

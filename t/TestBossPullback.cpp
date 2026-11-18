@@ -68,7 +68,10 @@ TEST(DungeonClearBossPullbackTest, PluggerIsFoughtPastTheBarDoor)
                 continue;
             found = true;
             EXPECT_EQ(b.kind, DungeonAnchorKind::Boss);
-            EXPECT_EQ(b.inheritCompletionFrom, B::NPC_PLUGGER) << "keeps his own kill-bit";
+            // No kill-bit to keep (his credit row 241 is gone): done on the
+            // rework's tracking slot, never on an inherited bit 0.
+            EXPECT_EQ(b.inheritCompletionFrom, 0u);
+            EXPECT_EQ(b.doneBossStateIndex, B::SLOT_PLUGGER);
             EXPECT_FLOAT_EQ(b.x, row->campX);
             EXPECT_FLOAT_EQ(b.y, row->campY);
             EXPECT_FLOAT_EQ(b.z, row->campZ);

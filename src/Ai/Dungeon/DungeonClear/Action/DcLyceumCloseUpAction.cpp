@@ -24,7 +24,7 @@
 // The rule is DcLyceumCloseUp (Util/DcLyceumCloseUpDecision.h); this feeds it a
 // live bot and walks the bot to the answer.
 //
-// A RUNG, NOT A WORLD TICK, for the Iron Hall's reason: what holds a bot out at
+// A RUNG, NOT A WORLD TICK: what holds a bot out at
 // 25-30yd — stock reach / MoveChase, the reach-heal, the heal reposition — is an
 // action in the combat engine, so the walk back has to outrank it there.
 namespace
