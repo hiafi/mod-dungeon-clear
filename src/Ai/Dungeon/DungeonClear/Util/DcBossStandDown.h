@@ -215,6 +215,34 @@ namespace DcBossStandDown
     // combat multiplier gates every DC combat action; the recovery ladders and
     // the phantom-combat breaker consult it directly).
     bool IsActive(Player* bot);
+
+    // THE FIVE-MAN BOSS FIGHT, for the stuck-combat breaker only. IsActive above
+    // stays false in a five-man (DC drives the fight there, so every DC combat
+    // rung must keep running), but the breaker is a recovery that must not fire
+    // mid-boss on any map: a healer knocked off the boss's floor reads as phantom
+    // combat (nothing reachable, nothing coming), and clearing her combat turned
+    // her onto the non-combat engine and the follow trail into a trash pack while
+    // the tank died unhealed (Blackrock Depths Phalanx, tr-20261118-203525-4,
+    // PHALANX-DIAG). Combat a boss holds while he fights the party is real.
+    //
+    // PURE kernel, one holder of a member's combat: a boss (roster row or the
+    // core's dungeon-boss flag), alive, in combat, not evading, whose victim is a
+    // party member OTHER than the bot asking. That last clause keeps the breaker
+    // for the case it exists for: a boss that holds only this bot, from where it
+    // cannot reach it, is the phantom shape, and so is an evading one.
+    inline bool HoldsFiveManBossFight(bool isBoss, bool alive, bool inCombat, bool evading,
+                                      bool victimIsOtherMember)
+    {
+        return isBoss && alive && inCombat && !evading && victimIsOtherMember;
+    }
+
+    // Is a boss fight live for `bot`'s party on a five-man map (dungeon, not a
+    // raid: raids answer through IsActive)? Walks every member's PvE combat
+    // references for a holder HoldsFiveManBossFight accepts. No leader needed:
+    // the roster read is the run owner's when there is one, the core's
+    // dungeon-boss flag otherwise. No hysteresis: the breaker's own timeout
+    // already runs a clock, and this resets it.
+    bool FiveManBossFightLive(Player* bot);
 }
 
 #endif  // _PLAYERBOT_DCBOSSSTANDDOWN_H

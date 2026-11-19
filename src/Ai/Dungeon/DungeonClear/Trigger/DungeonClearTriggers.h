@@ -572,6 +572,10 @@ public:
     {
     }
     bool IsActive() override;
+
+private:
+    // The firing test proper; IsActive adds the trail-glide stop on top.
+    bool Wanted();
 };
 
 // ANY role, BOTH engines. Fires when the bot is standing inside the pulse of an

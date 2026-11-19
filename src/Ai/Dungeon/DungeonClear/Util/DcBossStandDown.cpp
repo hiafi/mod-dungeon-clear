@@ -95,6 +95,21 @@ namespace
         Creature* const boss = ObjectAccessor::GetCreature(*at, guid);
         return boss && boss->IsAlive() && boss->GetEntry() == row.bossEntry && boss->IsInCombat();
     }
+
+    // FiveManBossFightLive's boss test: the core's dungeon-boss flag, or a roster
+    // BOSS row of the run (`roster`: the owner's value, read once per call; null
+    // when there is no owner).
+    bool IsFiveManBoss(Creature const* creature, std::vector<DungeonBossInfo> const* roster)
+    {
+        if (creature->IsDungeonBoss())
+            return true;
+        if (!roster)
+            return false;
+        for (DungeonBossInfo const& info : *roster)
+            if (info.kind == DungeonAnchorKind::Boss && info.entry == creature->GetEntry())
+                return true;
+        return false;
+    }
 }
 
 namespace DcBossStandDown
@@ -141,5 +156,58 @@ namespace DcBossStandDown
         run.standDownActive   = v.active;
         run.standDownSignalMs = v.lastSignalMs;
         return v.active;
+    }
+
+    bool FiveManBossFightLive(Player* bot)
+    {
+        if (!bot)
+            return false;
+        Map* const map = bot->GetMap();
+        if (!map || !map->IsDungeon() || map->IsRaid())
+            return false;
+
+        Group* const group = bot->GetGroup();
+        if (!group)
+            return false;  // no party: nobody else for a boss to be fighting
+        Player* const owner = DcLeaderSignal::FindRunOwner(bot);
+        PlayerbotAI* const ownerAI = owner ? GET_PLAYERBOT_AI(owner) : nullptr;
+        // Read once per call (Get returns the value by copy).
+        std::vector<DungeonBossInfo> const rosterRows = ownerAI
+            ? ownerAI->GetAiObjectContext()->GetValue<std::vector<DungeonBossInfo>>(DcKey::DungeonBosses)->Get()
+            : std::vector<DungeonBossInfo>{};
+        std::vector<DungeonBossInfo> const* const roster = ownerAI ? &rosterRows : nullptr;
+
+        // The holder's victim, as the player it belongs to (a pet's owner): a
+        // member of the party, and not the bot asking.
+        auto const victimIsOtherMember = [&](Unit* victim)
+        {
+            Player* const player = victim ? victim->GetCharmerOrOwnerPlayerOrPlayerItself() : nullptr;
+            if (!player || player == bot)
+                return false;
+            return group->IsMember(player->GetGUID());
+        };
+
+        auto const holdsFight = [&](Player* member)
+        {
+            if (!member || member->GetMap() != map)
+                return false;
+            for (auto const& kv : member->GetCombatManager().GetPvECombatRefs())
+            {
+                Unit* const other = kv.second->GetOther(member);
+                Creature* const creature = other ? other->ToCreature() : nullptr;
+                // The cheap reads first; the boss test (a roster scan) last.
+                if (!creature || !creature->IsAlive() || !creature->IsInCombat() ||
+                    creature->GetCombatManager().IsInEvadeMode() || !victimIsOtherMember(creature->GetVictim()))
+                    continue;
+                if (HoldsFiveManBossFight(IsFiveManBoss(creature, roster), true, true, false, true))
+                    return true;
+            }
+            return false;
+        };
+
+        for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+            if (holdsFight(ref->GetSource()))
+                return true;
+        return false;
     }
 }

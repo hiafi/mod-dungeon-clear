@@ -1734,32 +1734,49 @@ bool DungeonClearHealRepositionAction::Execute(Event /*event*/)
     // on the other leg and dropping to the Servants' Quarters below
     // (tr-20260927-190943-12, "closing on heal target ... los=0, sampled=0"). With
     // no complete route onto the target's floor there is nowhere honest to walk,
-    // so hold and let the stock heal stack work what is in sight.
+    // so the old answer was to hold and let the stock heal stack work what is in
+    // sight. That held a healer out of range and sight of a dying tank for a whole
+    // boss fight (BRD Phalanx, PHALANX-DIAG): with no standoff and no route, she now
+    // walks the leader tank's breadcrumb trail back to him instead (the Trail rung,
+    // DungeonClearMath::ChooseHealRepositionMove), as follow-tank would out of
+    // combat, when the heal target IS the tank (the trail leads nowhere else). A
+    // camp leash still holds.
     if (!haveDest)
     {
+        Player* const tank = AI_VALUE(Player*, DcKey::PartyTank);
+        bool const targetIsTank = tank && tank->GetGUID() == target->GetGUID();
         Position close;
-        if (!DcEngageGeometry::PathedCloseOn(bot, targetPos, /*stopShort*/ 5.0f, close))
-        {
-            DC_PULL_TRACE("[DC:{}] heal reposition: no route onto {}'s floor ({:.1f}yd, "
-                          "los=0) -> holding", bot->GetName(),
-                          target->GetGUID().ToString(), bot->GetExactDist2d(target));
-            return false;
-        }
-        dx = close.GetPositionX();
-        dy = close.GetPositionY();
-        dz = close.GetPositionZ();
-
+        bool const haveClose = DcEngageGeometry::PathedCloseOn(bot, targetPos, /*stopShort*/ 5.0f, close);
         // A leashed healer never takes the close past its leash: that walk is
-        // exactly the one that carried it onto the Banquet Hall floor. Yield the
-        // tick so the stock heal stack works whatever is in sight from the camp.
-        if (leash && !HealLeashRegistry::WithinLeash(camp.GetPositionX(), camp.GetPositionY(),
-                                                     leashRadius, dx, dy))
+        // exactly the one that carried it onto the Banquet Hall floor.
+        bool const closeInLeash = haveClose &&
+            (!leash || HealLeashRegistry::WithinLeash(camp.GetPositionX(), camp.GetPositionY(),
+                                                      leashRadius, close.GetPositionX(),
+                                                      close.GetPositionY()));
+        // haveStandoff is false here by construction: this is the no-standoff branch.
+        switch (DungeonClearMath::ChooseHealRepositionMove(/*haveStandoff*/ false, haveClose, leash != nullptr,
+                                                           closeInLeash, targetIsTank))
         {
-            DC_PULL_TRACE("[DC:{}] heal reposition: leashed to camp ({:.0f}yd) -> holding, "
-                          "heal target {} is {:.1f}yd out",
-                          bot->GetName(), leashRadius, target->GetGUID().ToString(),
-                          bot->GetExactDist2d(target));
-            return false;
+            case DungeonClearMath::HealRepositionMove::PathedClose:
+                dx = close.GetPositionX();
+                dy = close.GetPositionY();
+                dz = close.GetPositionZ();
+                break;
+            case DungeonClearMath::HealRepositionMove::Trail:
+                return TrailTankForHeal(target, healRange, standoff);
+            default:
+                // Yield the tick so the stock heal stack works whatever is in sight.
+                if (haveClose)
+                    DC_PULL_TRACE("[DC:{}] heal reposition: leashed to camp ({:.0f}yd) -> holding, "
+                                  "heal target {} is {:.1f}yd out",
+                                  bot->GetName(), leashRadius, target->GetGUID().ToString(),
+                                  bot->GetExactDist2d(target));
+                else
+                    DC_PULL_TRACE("[DC:{}] heal reposition: no route onto {}'s floor ({:.1f}yd, "
+                                  "los=0, tank={}, leashed={}) -> holding", bot->GetName(),
+                                  target->GetGUID().ToString(), bot->GetExactDist2d(target),
+                                  targetIsTank ? 1 : 0, leash ? 1 : 0);
+                return false;
         }
     }
 
@@ -1782,6 +1799,85 @@ bool DungeonClearHealRepositionAction::Execute(Event /*event*/)
     DcMoveTo(map->GetId(), dx, dy, dz, /*idle*/ false, /*react*/ false,
            /*normal_only*/ false, /*exact_waypoint*/ false, prio);
     return true;
+}
+
+bool DungeonClearHealRepositionAction::TrailTankForHeal(Unit* target, float healRange, float standoff)
+{
+    // The trail's far end sits `standoff` yards back along it (the same heal
+    // standoff the ring samples, never a few yards behind the tank: that is the
+    // boss's melee and PBAoE ring), and the glide is cut at the first crumb with
+    // heal range and LOS to the tank (HealTrailWindowEnd), so she stops where she
+    // can heal. The heal trigger also stops the glide the tick the tank is
+    // healable again (DcApproachState::healTrailGlide).
+    constexpr float kRangeMargin = 3.0f;    // a step of tank movement stays in range
+    constexpr float kEyeBump = 2.0f;        // eye height for the LOS ray (cf. FindStandoffPoint)
+    DcApproachState& approach = context->GetValue<DcApproachState&>(DcKey::ApproachState)->Get();
+
+    // OUR glide already in flight chains on. Any other escort spline (a transit
+    // or engage glide) is not ours to keep the tick for.
+    if (approach.healTrailGlide && TrailSplineRunning(bot))
+        return true;
+    approach.healTrailGlide = false;
+
+    Map* const map = bot->GetMap();
+    float const reach = std::max(5.0f, healRange - kRangeMargin);
+    float const tx = target->GetPositionX();
+    float const ty = target->GetPositionY();
+    float const tz = target->GetPositionZ();
+    auto const healableFrom = [&](Position const& p)
+    {
+        return p.GetExactDist2d(tx, ty) <= reach &&
+               map->isInLineOfSight(p.GetPositionX(), p.GetPositionY(), p.GetPositionZ() + kEyeBump, tx, ty,
+                                    tz + kEyeBump, bot->GetPhaseMask(), LINEOFSIGHT_CHECK_VMAP,
+                                    VMAP::ModelIgnoreFlags::Nothing);
+    };
+
+    std::vector<Position> trail;
+    if (DcLeaderSignal::GetLeaderScoutTrail(bot, standoff, trail) && trail.size() >= 2)
+    {
+        trail.resize(DungeonClearMath::HealTrailWindowEnd(trail.size(),
+            [&](std::size_t i) { return healableFrom(trail[i]); }));
+        Movement::PointsArray window;
+        window.reserve(trail.size());
+        for (Position const& p : trail)
+            window.emplace_back(p.GetPositionX(), p.GetPositionY(), p.GetPositionZ());
+        if (DcMovement::SplinePath(botAI, window))
+        {
+            approach.healTrailGlide = true;
+            DC_PULL_TRACE("[DC:{}] heal reposition: no route onto {}'s floor ({:.1f}yd) -> "
+                          "gliding the tank's breadcrumbs ({} points)", bot->GetName(),
+                          target->GetGUID().ToString(), bot->GetExactDist2d(target), window.size());
+            return true;
+        }
+    }
+
+    // No glide window (off the trail, or already past the standoff crumb): one
+    // probed step to the nearest reachable crumb, never a straight line
+    // (normal_only), and only FORWARD: a healer already nearer the tank than the
+    // standoff crumb is never walked back down the trail to it.
+    Position crumb;
+    if (DcLeaderSignal::GetLeaderScoutTrailPoint(bot, standoff, crumb) &&
+        bot->GetExactDist(&crumb) > kTrailArrival && crumb.GetExactDist(target) < bot->GetExactDist(target))
+    {
+        float const toDest = bot->GetExactDist2d(&crumb);
+        MovementPriority const prio =
+            (toDest <= DC_COMBAT_APPROACH_RANGE)
+                ? MovementPriority::MOVEMENT_COMBAT
+                : MovementPriority::MOVEMENT_NORMAL;
+        if (DcMoveTo(bot->GetMapId(), crumb.GetPositionX(), crumb.GetPositionY(), crumb.GetPositionZ(),
+                     /*idle*/ false, /*react*/ false, /*normal_only*/ true, /*exact_waypoint*/ false, prio))
+        {
+            DC_PULL_TRACE("[DC:{}] heal reposition: no route onto {}'s floor ({:.1f}yd) -> "
+                          "trailing the tank's breadcrumbs ({:.1f}yd step)", bot->GetName(),
+                          target->GetGUID().ToString(), bot->GetExactDist2d(target), toDest);
+            return true;
+        }
+    }
+
+    DC_PULL_TRACE("[DC:{}] heal reposition: no route onto {}'s floor ({:.1f}yd, los=0) "
+                  "and no usable trail -> holding", bot->GetName(),
+                  target->GetGUID().ToString(), bot->GetExactDist2d(target));
+    return false;
 }
 
 bool DungeonClearHazardVacateAction::Execute(Event /*event*/)

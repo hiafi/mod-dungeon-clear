@@ -796,7 +796,8 @@ private:
 // can heal from — after which the stock heal stack re-acquires the target on its
 // own. Samples a ring of standoff points around the target and takes the nearest
 // one that is navmesh-valid, has LOS, and is path-reachable; falls back to a
-// pathfound approach toward the target (5yd standoff) when none validate. Banded
+// pathfound approach toward the target (5yd standoff) when none validate, and to
+// the leader tank's breadcrumb trail when that has no route either. Banded
 // COMBAT/NORMAL priority like the assist/regroup actions to avoid plowing a mob
 // train on a long run back. Driven by DungeonClearHealRepositionTrigger.
 class DungeonClearHealRepositionAction : public DcMovementAction
@@ -807,6 +808,12 @@ public:
     {
     }
     bool Execute(Event event) override;
+
+private:
+    // The last rung (no standoff, no route onto the target's floor, the target
+    // is the tank): walk the leader tank's breadcrumb trail back toward him, to
+    // the first crumb in heal range with LOS. True iff a move is in flight.
+    bool TrailTankForHeal(Unit* target, float healRange, float standoff);
 };
 
 // ANY role, BOTH engines. Moves the bot OUT of an active-vacate hazard emitter's
