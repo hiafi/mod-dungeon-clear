@@ -422,6 +422,16 @@ namespace DcEventDoorRegistry
             case 184393:  // Old Hillsbrad — Thrall's Prison Door (gossip through
                           // the gate; his script opens it via EVENT_OPEN_DOORS)
                 return true;
+            // Blackrock Depths — the Dark Coffer (174565), a door-type GO in
+            // the Black Vault. Opening it with the Dark Keeper Key STARTS the
+            // reworked Vault encounter, so only RunTheVault (event 9) may use
+            // it, once the party has mustered. Left unlisted, the generic
+            // door rung opened it on sight (the tank held the key), started
+            // the Vault mid-walk and kept the run stalled on "Opening the door
+            // to The Vault." until the harness timed it out (smoke run
+            // 2026-11-19, STAGE-SMOKE2-DIAG).
+            case 174565:  // Blackrock Depths — the Dark Coffer
+                return true;
             // Blackwing Lair — Chromaggus' cage Portcullis (179116, guid 75161
             // at (-7506.3,-1043.2,480.0)). The cage is opened from the RAID's
             // side by the Lever (179148, 65yd south), whose GossipHello does

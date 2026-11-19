@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cmath>
 
+#include "Ai/Dungeon/DungeonClear/Data/DcEventDoorRegistry.h"
 #include "Ai/Dungeon/DungeonClear/Data/DungeonEventRegistry.h"
 #include "Ai/Dungeon/DungeonClear/Data/Events/DungeonEventTables.h"
 #include "Ai/Dungeon/DungeonClear/Overrides/BossRosterRegistry.h"
@@ -638,6 +639,16 @@ TEST(DungeonEventRegistryTest, BlackrockVaultEventShape)
 }
 
 // The Vault's decision, row by row (DcBrdVaultDecision.h).
+// The Dark Coffer is a door-type GO whose opening STARTS the Vault: only
+// RunTheVault may use it, so navigation's door rung must never open it on
+// sight (smoke run 2026-11-19: the tank held the key, the rung opened it
+// mid-walk and the run stalled on "Opening the door to The Vault.").
+TEST(DcBlackrockDepthsVaultTest, TheDarkCofferIsNavigationIgnored)
+{
+    EXPECT_EQ(DcBlackrockDepths::GO_DARK_COFFER_DOOR, 174565u);
+    EXPECT_TRUE(DcEventDoorRegistry::IsNavigationIgnored(DcBlackrockDepths::GO_DARK_COFFER_DOOR));
+}
+
 TEST(DcBlackrockDepthsVaultTest, DecideFollowsTheTriggerRules)
 {
     namespace B = DcBlackrockDepths;
