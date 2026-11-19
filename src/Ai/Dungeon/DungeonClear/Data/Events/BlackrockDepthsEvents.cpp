@@ -1278,12 +1278,17 @@ void RegisterBlackrockDepthsEvents(std::vector<DungeonEvent>& out)
     // WakeHurley. The roster's Hurley row then engages him where his path left
     // him.
     //
-    // Not persistent: nothing here spans a fight. Hurley is passive until the
-    // party engages him, which happens after this objective latches, and a
-    // rewind re-runs a MoveTo and a hook that reads Hurley before touching a keg.
+    // Persistent so the pull is the event's: a persistent anchored event drops
+    // the followers' dynamic scout-lag and they tight-follow the tank, which
+    // WakeHurley's pre-wake gather needs. Non-persistent, every follower tick's
+    // "follow tank" stopped the gather nudge and the party sat on the 15yd lag
+    // ring, so Hurley's wake ended on a straggler (smoke run 2026-11-19,
+    // STAGE-SMOKE4-HURLEY-DIAG). Keeping progress across a combat gap is
+    // harmless here: the hook reads Hurley before touching a keg.
     out.push_back(
         EventBuilder(MAP_ID, EVENT_HURLEY_KEGS, "Hurley's Kegs")
             .Anchored(/*orderIndex*/ 11)
+            .Persistent()
             .MoveTo(KEG_X, KEG_Y, KEG_Z, /*radius*/ 4.0f)
             .Custom(HOOK_WAKE_HURLEY)
             // His walk from the bar's back corner to the floor is ~25yd at walk

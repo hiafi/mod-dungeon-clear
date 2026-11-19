@@ -1067,6 +1067,7 @@ TEST(DungeonEventRegistryTest, BlackrockHurleyKegsEventShape)
     EXPECT_EQ(e->activation, EventActivation::Anchored);
     EXPECT_EQ(e->orderIndex, 11u);  // Hurley's own bit
     EXPECT_TRUE(e->required);
+    EXPECT_TRUE(e->persistent) << "the pre-wake gather needs the followers' scout-lag off";
 
     ASSERT_EQ(e->steps.size(), 2u);
     EXPECT_EQ(e->steps[0].kind, EventStepKind::MoveTo);
