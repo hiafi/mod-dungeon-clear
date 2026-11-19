@@ -69,8 +69,8 @@ namespace DcTestDungeonRegistry
             // sections. Each row enters where its Finder entry does and runs at
             // its section's boss level: section 1, the Detention Block
             // (Gerstahn -> the Ring of Law), at the portal; section 2,
-            // Shadowforge City (Loregrain -> Bael'Gar), at S2a north of the
-            // Ring, with one Dark Keeper Key for the Vault (runItemId); section
+            // Shadowforge City (Loregrain -> Bael'Gar), at S2g in the Ring's
+            // gallery, with one Dark Keeper Key for the Vault (runItemId); section
             // 3, the Manufactory (the Shadowforge Lock -> Argelmach), in the East
             // Garrison by the lever; section 4, the Imperial Seat (the Grim
             // Guzzler -> the Emperor), at S4b on the lower bar floor. The retired

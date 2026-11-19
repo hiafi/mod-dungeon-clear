@@ -1619,13 +1619,13 @@ void RegisterBlackrockDepthsWings(std::unordered_map<uint32, DungeonWingLayout>&
     //     Boss anchors only); it is the last of the wing's four anchors in
     //     clear order, so the wing completes when its list is cleared, which
     //     is the same thing.
-    //   brd-s2 Shadowforge City (LFG 308 / heroic 311), S2a -> Bael'Gar:
+    //   brd-s2 Shadowforge City (LFG 308 / heroic 311), S2g -> Bael'Gar:
     //     Loregrain 4, Stilgiss and Verek 6, the Vault (event 9, optional, no
     //     bit), Fineous (no credit row: slot 7, no bit), Incendius 5, Bael'Gar
     //     8, cleared in the roster patch's order. The mask leaves Fineous's bit
-    //     7 out: it never sets on a reworked server. S2a -> Loregrain crosses
+    //     7 out: it never sets on a reworked server. S2g, the start, is in
     //     the Ring's spectator gallery, which is not a fight: an instance that
-    //     starts at S2a stands every gallery unit down (the rework instance's
+    //     starts there stands every gallery unit down (the rework instance's
     //     flag, user ruling 2026-11-17), so DC has nothing to do there.
     //   brd-s3 Manufactory (LFG 309 / heroic 312), the East Garrison -> Golem
     //     Lord Argelmach: the Shadowforge Lock (event 2), Angerforge 9 (a dead-

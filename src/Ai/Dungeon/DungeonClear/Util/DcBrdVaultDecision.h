@@ -105,7 +105,7 @@ namespace DcBrdVault
         return now ? now : 1u;
     }
 
-    // The muster clock (R-2-B MJ-2). After a wipe the leader respawns at S2a,
+    // The muster clock (R-2-B MJ-2). After a wipe the leader respawns at S2g,
     // about 750yd away, and the hook keeps ticking during the ~110 s run back;
     // a clock that started when the Vault went back to NOT_STARTED has run out
     // before anyone is home, and the bot key holder opens the coffer with the

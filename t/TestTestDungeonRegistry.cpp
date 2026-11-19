@@ -148,17 +148,18 @@ TEST(DcTestDungeonRegistryTest, BlackrockDepthsRowsAreItsWings)
     EXPECT_STREQ(s1->wing, "Detention Block");
     EXPECT_EQ(s1->recommendedLevel, 52u);
 
-    // Section 2 enters at its Finder start S2a, north of the Ring of Law and
-    // outside its area trigger, at its boss level (53).
+    // Section 2 enters at its Finder start S2g, up in the Ring of Law's
+    // gallery and well clear of its area trigger, at its boss level (53).
     Row const* s2 = Find("brd-s2");
     ASSERT_NE(s2, nullptr);
     EXPECT_EQ(s2->mapId, 230u);
     EXPECT_STREQ(s2->wing, "Shadowforge City");
     EXPECT_EQ(s2->recommendedLevel, 53u);
-    EXPECT_NEAR(s2->x, 595.0f, 0.01f);
-    EXPECT_NEAR(s2->y, -92.0f, 0.01f);
-    EXPECT_NEAR(s2->z, -45.0f, 0.01f);
-    EXPECT_GT(std::hypot(s2->x - 596.432f, s2->y - -188.498f), 40.0f) << "S2a must be well clear of AT 1526";
+    EXPECT_NEAR(s2->x, 544.0f, 0.01f);
+    EXPECT_NEAR(s2->y, -181.3f, 0.01f);
+    EXPECT_NEAR(s2->z, -36.0f, 0.01f);
+    EXPECT_GT(std::hypot(s2->x - 596.432f, s2->y - -188.498f), 40.0f) << "S2g must be well clear of AT 1526";
+    EXPECT_GT(s2->z, -50.0f + 10.0f) << "S2g is up in the gallery, not on the Ring's floor";
     // The Vault is key-gated; a test run of section 2 is handed ONE Dark Keeper
     // Key so the smoke run exercises it (user ruling 2026-11-17). No other BRD
     // row hands anything out.

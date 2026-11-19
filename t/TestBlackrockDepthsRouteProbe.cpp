@@ -245,18 +245,18 @@ TEST(BlackrockDepthsRouteProbe, SectionThreeAndFourSpotsAreOnTheNavmesh)
 }
 
 // The reworked dungeon's section 2 ("brd-s2", Shadowforge City): a Finder group
-// lands at S2a, north of the Ring of Law, with the Ring NOT won — its gates are
+// lands at S2g, up in the Ring of Law's gallery, with the Ring NOT won — its gates are
 // shut, and the navmesh does not carry doors. Every leg of the section's clear
-// order must be reachable from S2a without crossing the arena floor (a route
+// order must be reachable from S2g without crossing the arena floor (a route
 // through it would hit a closed gate in game, or pull the party into the
-// trial), and the two new stand points (S2a, the Vault's hold in front of the
+// trial), and the two new stand points (S2g, the Vault's hold in front of the
 // Dark Coffer) must sit on the floor. Each leg PRINTS whether it uses the
 // spectator gallery that rings the arena (z -38 to -34). That is the expected
 // way to Loregrain, and it is not a fight: for a group whose instance starts
-// at S2a every gallery unit (spectators, citizens, the armed Anvilrage guards,
+// at S2g every gallery unit (spectators, citizens, the armed Anvilrage guards,
 // medics, officers, footmen and the senators) stands down (user ruling
 // 2026-11-17, the instance's flag), so the route walks through, not over them.
-TEST(BlackrockDepthsRouteProbe, ShadowforgeCityRunsFromS2aOutsideTheRingOfLaw)
+TEST(BlackrockDepthsRouteProbe, ShadowforgeCityRunsFromS2gOutsideTheRingOfLaw)
 {
     std::shared_ptr<dtNavMesh> mesh = LoadOrSkip();
     if (!mesh)
@@ -264,7 +264,7 @@ TEST(BlackrockDepthsRouteProbe, ShadowforgeCityRunsFromS2aOutsideTheRingOfLaw)
 
     namespace B = DcBlackrockDepths;
     std::vector<Pt> const legs = {
-        { B::S2_START_X, B::S2_START_Y, B::S2_START_Z, "S2a" },
+        { B::S2_START_X, B::S2_START_Y, B::S2_START_Z, "S2g" },
         { 530.2f, -243.9f, -43.0f, "Loregrain" },
         { B::STILGISS_X, B::STILGISS_Y, B::STILGISS_Z, "Stilgiss" },
         { B::VAULT_HOLD_X, B::VAULT_HOLD_Y, B::VAULT_FLOOR_Z, "Vault hold" },
@@ -284,7 +284,7 @@ TEST(BlackrockDepthsRouteProbe, ShadowforgeCityRunsFromS2aOutsideTheRingOfLaw)
         EXPECT_LT(std::fabs(s.z - spot.z), 2.5f) << spot.name << " snapped to another floor";
     }
 
-    std::printf("Blackrock Depths — section 2 legs from S2a\n");
+    std::printf("Blackrock Depths — section 2 legs from S2g\n");
     for (std::size_t i = 0; i + 1 < legs.size(); ++i)
     {
         Pt const from = SnapOrKeep(mesh.get(), legs[i]);

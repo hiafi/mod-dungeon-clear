@@ -122,7 +122,7 @@ namespace DcBlackrockDepths
     // boss slots (0-18 = the DungeonEncounter bits, 19 = the Vault). The Finder
     // splits the map into four runs, each with its own start and last boss:
     //   1 Detention Block  (LFG 30,  heroic 310): the entrance -> the Ring of Law
-    //   2 Shadowforge City (LFG 308, heroic 311): S2a -> Bael'Gar
+    //   2 Shadowforge City (LFG 308, heroic 311): S2g -> Bael'Gar
     //   3 Manufactory      (LFG 309, heroic 312): the Shadowforge Lock -> Argelmach
     //   4 Imperial Seat    (LFG 276, heroic 313): S4b -> the Emperor
     // Each section is a wing: "brd-s1" .. "brd-s4" (the stock "Upper City" wing
@@ -163,13 +163,15 @@ namespace DcBlackrockDepths
     constexpr uint32 SECTION_3_ENCOUNTER_MASK = 0x00600u;
     constexpr uint32 SECTION_4_ENCOUNTER_MASK = 0x79800u;
 
-    // Section 2's Finder start S2a (lfg_dungeon_template 308; the rework's
-    // kSections): the open table hall 55yd north of the Ring's north gate,
-    // outside area trigger 1526.
-    constexpr float S2_START_X = 595.0f;
-    constexpr float S2_START_Y = -92.0f;
-    constexpr float S2_START_Z = -45.0f;
-    constexpr float S2_START_O = 1.89f;
+    // Section 2's Finder start S2g (lfg_dungeon_template 308; the rework's
+    // kSections): the flat south end of the Ring's spectator gallery (z -36),
+    // on the first leg to Loregrain. The gallery stands down for a section 2
+    // instance. The first pick, S2a (595, -92, -45) in the table hall north of
+    // the Ring, sat in two Fireguard patrols (the 2026-11-18 smoke wipe).
+    constexpr float S2_START_X = 544.0f;
+    constexpr float S2_START_Y = -181.3f;
+    constexpr float S2_START_Z = -36.0f;
+    constexpr float S2_START_O = 5.18f;
 
     // Section 3's Finder start (lfg_dungeon_template 309): the East Garrison,
     // 8yd from the Shadowforge Lock lever 161460 and facing it. The group pulls

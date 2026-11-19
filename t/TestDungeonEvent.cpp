@@ -824,11 +824,11 @@ TEST(DcBlackrockDepthsVaultTest, AttemptsAreBoundedAndFightsDoNotBurnTheTimeout)
     v.vaultState = B::STATE_DONE;
     EXPECT_EQ(Decide(v), Action::Finish);
 
-    // The between-attempts budget fits a corpse run from S2a (about 750yd).
+    // The between-attempts budget fits a corpse run from S2g (about 750yd).
     EXPECT_GE(B::VAULT_TIMEOUT_MS, 300000u);
 }
 
-// R-2-B MJ-2: after a wipe the leader respawns at S2a and the run back takes
+// R-2-B MJ-2: after a wipe the leader respawns at S2g and the run back takes
 // about 110 s, with the hook ticking all the way. The muster wait must be
 // timed from the leader's return, not from the Vault going NOT_STARTED, or
 // the bot key holder opens the coffer with the party still at the entrance.
@@ -847,7 +847,7 @@ TEST(DcBlackrockDepthsVaultTest, TheMusterIsTimedFromTheLeadersReturn)
     EXPECT_EQ(stamp, 0u);
     stamp = NextMusterStamp(stamp, 2, true, false, now += 5000);
     EXPECT_EQ(stamp, 0u);
-    // NOT_STARTED, the leader at S2a: the coffer is out of the grid for 120 s.
+    // NOT_STARTED, the leader at S2g: the coffer is out of the grid for 120 s.
     for (int i = 0; i < 120; ++i)
     {
         stamp = NextMusterStamp(stamp, B::STATE_NOT_STARTED, false, false, now += 1000);
