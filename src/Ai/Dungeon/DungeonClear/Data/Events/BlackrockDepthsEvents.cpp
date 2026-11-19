@@ -35,6 +35,7 @@
 #include "Ai/Dungeon/DungeonClear/Data/Events/BlackrockDepthsLyceum.h"
 #include "Ai/Dungeon/DungeonClear/DcValueKeys.h"
 #include "Ai/Dungeon/DungeonClear/Overrides/ObjectiveHookRegistry.h"
+#include "Ai/Dungeon/DungeonClear/Util/DcBrdHurleyWakeDecision.h"
 #include "Ai/Dungeon/DungeonClear/Util/DcBrdVaultDecision.h"
 #include "Ai/Dungeon/DungeonClear/Util/DcPlayerbotCompat.h"
 #include "Ai/Dungeon/DungeonClear/Util/DcRun.h"
@@ -182,6 +183,25 @@ namespace
     // use its own SmartAI chain without the party standing at the kegs.
     constexpr uint32 BRD_KEG_FLOOR_MS = 1000;
 
+    // Living party members on the bot's map (the bot itself included).
+    template <typename Fn>
+    void ForEachLivingMember(Player* bot, Fn&& fn)
+    {
+        Group* group = bot->GetGroup();
+        if (!group)
+        {
+            fn(bot);
+            return;
+        }
+        for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+        {
+            Player* member = ref->GetSource();
+            if (member && member->IsInWorld() && member->IsAlive() &&
+                member->GetMapId() == bot->GetMapId())
+                fn(member);
+        }
+    }
+
     // --- WakeHurley (hook 52) ----------------------------------------------
     // Hurley Blackbreath (9537) and his three Blackbreath Cronies spawn
     // INVISIBLE, passive and immune to players. What brings them in is the
@@ -200,6 +220,9 @@ namespace
     //   * visible, no longer immune  -> Done (on the floor; the roster's Hurley
     //                                   row engages him)
     //   * visible, still immune      -> Running (walking his path)
+    //   * invisible, no keg used yet,
+    //     a member >6yd from the tank -> walk the stragglers in, Running (the
+    //                                   gather, bounded; DcBrdHurleyWakeDecision.h)
     //   * invisible                  -> use the next ready keg, then Running
     // A used keg is consumed (43200s respawn) and skipped by the GO_READY test,
     // so each tick reaches for the next one; Hurley's visibility ends it.
@@ -213,15 +236,65 @@ namespace
             return hurley->IsImmuneToPC() ? ObjectiveArriveResult::Running
                                           : ObjectiveArriveResult::Done;
 
-        if (DcRun::Of(context).Throttled(DcThrottle::BrdKegUse, BRD_KEG_FLOOR_MS))
-            return ObjectiveArriveResult::Running;
-
         std::list<GameObject*> kegs;
         bot->GetGameObjectListWithEntryInGrid(kegs, GO_THUNDERBREW_KEG, BRD_KEG_SCAN);
+
+        // Gather before the FIRST keg (DcBrdHurleyWakeDecision.h): his walk ends
+        // in an attack on the nearest player, so nobody may stand nearer to it
+        // than the tank. Once a keg is used the chain is under way: no hold.
+        DcRunState& run = DcRun::Of(context);
+        bool const kegUsed = std::any_of(kegs.begin(), kegs.end(), [](GameObject const* keg)
+        {
+            return !keg->isSpawned() || keg->getLootState() != GO_READY;
+        });
+        std::vector<Player*> stragglers;
+        if (!kegUsed)
+            ForEachLivingMember(bot, [&](Player* m)
+            {
+                if (m != bot && DcBrdHurleyWake::Straggles(m->GetExactDist(bot)))
+                    stragglers.push_back(m);
+            });
+        DungeonEventProgress const& prog =
+            context->GetValue<DungeonEventProgress&>(DcKey::EventProgress)->Get();
+        DcBrdHurleyWake::Gate const gate = DcBrdHurleyWake::Decide(
+            kegUsed, static_cast<uint32>(stragglers.size()), prog.stepStartMs, getMSTime());
+        if (gate == DcBrdHurleyWake::Gate::Gather)
+        {
+            // Bots only: a human (a `.bot self` one included) walks in on their
+            // own, and the bounded wait covers one who does not.
+            if (!run.Throttled(DcThrottle::BrdHurleyGatherNudge, DcBrdHurleyWake::GATHER_NUDGE_MS))
+                for (Player* m : stragglers)
+                {
+                    if (DcPlayerbotCompat::IsHumanControlled(m))
+                        continue;
+                    DcBrdHurleyWake::Aim const aim = DcBrdHurleyWake::AimFor(
+                        m->GetPositionX(), m->GetPositionY(), bot->GetPositionX(), bot->GetPositionY());
+                    m->GetMotionMaster()->MovePoint(0, aim.x, aim.y, bot->GetPositionZ(), FORCED_MOVEMENT_NONE,
+                                                    0.0f, 0.0f, /*generatePath*/ true, false);
+                }
+            if (!run.Throttled(DcThrottle::BrdEventLog, 10000))
+                LOG_INFO("playerbots.dungeonclear",
+                         "[DC:{}] Blackrock Depths — gathering the party on the tank before Hurley's kegs "
+                         "({} not within {:.0f}yd yet)",
+                         bot->GetName(), stragglers.size(), DcBrdHurleyWake::GATHER_RADIUS);
+            return ObjectiveArriveResult::Running;
+        }
+
+        if (run.Throttled(DcThrottle::BrdKegUse, BRD_KEG_FLOOR_MS))
+            return ObjectiveArriveResult::Running;
+
         for (GameObject* keg : kegs)
         {
             if (!keg->isSpawned() || keg->getLootState() != GO_READY)
                 continue;
+            // Logged on the first keg only: once it is used the gather is over.
+            if (gate == DcBrdHurleyWake::Gate::WakeUngathered)
+                LOG_WARN("playerbots.dungeonclear",
+                         "[DC:{}] Blackrock Depths — {} member(s) still not within {:.0f}yd of the tank after "
+                         "{} s; waking Hurley anyway (first: {}, {:.1f}yd)",
+                         bot->GetName(), stragglers.size(), DcBrdHurleyWake::GATHER_RADIUS,
+                         DcBrdHurleyWake::GATHER_WAIT_MS / 1000, stragglers.front()->GetName(),
+                         stragglers.front()->GetExactDist(bot));
             keg->Use(bot);
             LOG_INFO("playerbots.dungeonclear",
                      "[DC:{}] Blackrock Depths — used Thunderbrew Lager Keg {} to bring "
@@ -451,25 +524,6 @@ namespace
     {
         InstanceScript* inst = DcTargeting::GetInstanceScript(bot);
         return inst && inst->GetData(TYPE_LYCEUM) == STATE_DONE;
-    }
-
-    // Living party members on the bot's map (the bot itself included).
-    template <typename Fn>
-    void ForEachLivingMember(Player* bot, Fn&& fn)
-    {
-        Group* group = bot->GetGroup();
-        if (!group)
-        {
-            fn(bot);
-            return;
-        }
-        for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
-        {
-            Player* member = ref->GetSource();
-            if (member && member->IsInWorld() && member->IsAlive() &&
-                member->GetMapId() == bot->GetMapId())
-                fn(member);
-        }
     }
 
     // Every party member in the world, dead or alive, on any map (the bot

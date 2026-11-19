@@ -14,6 +14,7 @@
 #include "Ai/Dungeon/DungeonClear/Overrides/BossRosterRegistry.h"
 #include "Ai/Dungeon/DungeonClear/Overrides/ObjectiveHookRegistry.h"
 #include "Ai/Dungeon/DungeonClear/Util/DungeonEventExecutor.h"
+#include "Ai/Dungeon/DungeonClear/Util/DcBrdHurleyWakeDecision.h"
 #include "Ai/Dungeon/DungeonClear/Util/DcBrdVaultDecision.h"
 #include "Ai/Dungeon/DungeonClear/Util/DcLyceumCloseUpDecision.h"
 #include "Ai/Dungeon/DungeonClear/Util/DcPackLeashDecision.h"
@@ -647,6 +648,54 @@ TEST(DcBlackrockDepthsVaultTest, TheDarkCofferIsNavigationIgnored)
 {
     EXPECT_EQ(DcBlackrockDepths::GO_DARK_COFFER_DOOR, 174565u);
     EXPECT_TRUE(DcEventDoorRegistry::IsNavigationIgnored(DcBlackrockDepths::GO_DARK_COFFER_DOOR));
+
+    // ... and so are the Vault's other shut doors, or the blocking-door value
+    // flags the next one on the route's last leg (smoke run 2026-11-19: Relic
+    // Coffer Door 174559, lock 639, auto-paused the run 13.8yd from the hold
+    // spot, short of the event's 8yd arrive radius). The Secret Door 174553 is
+    // instance-scripted; 174554-174564 and 174566 are the Relic Coffer Doors.
+    EXPECT_TRUE(DcEventDoorRegistry::IsNavigationIgnored(174553));
+    for (uint32 relicDoor = 174554; relicDoor <= 174564; ++relicDoor)
+        EXPECT_TRUE(DcEventDoorRegistry::IsNavigationIgnored(relicDoor)) << relicDoor;
+    EXPECT_TRUE(DcEventDoorRegistry::IsNavigationIgnored(174566));
+    // The Vault's chairs (174550-174552) are not doors, and the Vault's
+    // neighbours are not swept up with it.
+    EXPECT_FALSE(DcEventDoorRegistry::IsNavigationIgnored(174552));
+    EXPECT_FALSE(DcEventDoorRegistry::IsNavigationIgnored(174567));
+}
+
+// Hurley's wake ends in an attack on the nearest player: the party gathers on
+// the tank before the first keg, bounded (smoke run 2026-11-19: the healer
+// stood 8yd from his walk end, the tank 25yd away, and the party wiped in 13 s).
+TEST(DcBlackrockDepthsHurleyTest, TheFirstKegWaitsForTheGather)
+{
+    namespace H = DcBrdHurleyWake;
+    using H::Gate;
+    uint32 const start = 100000;
+
+    EXPECT_FALSE(H::Straggles(H::GATHER_RADIUS));
+    EXPECT_TRUE(H::Straggles(H::GATHER_RADIUS + 0.1f));
+
+    // Everyone gathered: wake at once.
+    EXPECT_EQ(H::Decide(false, 0, start, start), Gate::Wake);
+    // A straggler holds the first keg, up to the wait.
+    EXPECT_EQ(H::Decide(false, 1, start, start), Gate::Gather);
+    EXPECT_EQ(H::Decide(false, 4, start, start + H::GATHER_WAIT_MS - 1), Gate::Gather);
+    // Past it, the keg is used anyway.
+    EXPECT_EQ(H::Decide(false, 1, start, start + H::GATHER_WAIT_MS), Gate::WakeUngathered);
+    // A keg already used: the chain is under way, never held.
+    EXPECT_EQ(H::Decide(true, 3, start, start), Gate::Wake);
+    // The clock wraps with getMSTime.
+    EXPECT_EQ(H::Decide(false, 1, 0xFFFFFF00u, 0x00000010u), Gate::Gather);
+
+    // The walk aims inside the radius, on the straggler's own side of the tank.
+    H::Aim const a = H::AimFor(20.0f, 0.0f, 0.0f, 0.0f);
+    EXPECT_NEAR(a.x, H::GATHER_AIM, 0.001f);
+    EXPECT_NEAR(a.y, 0.0f, 0.001f);
+    EXPECT_FALSE(H::Straggles(std::hypot(a.x, a.y)));
+    H::Aim const close = H::AimFor(1.0f, 1.0f, 0.0f, 0.0f);
+    EXPECT_FLOAT_EQ(close.x, 1.0f);
+    EXPECT_FLOAT_EQ(close.y, 1.0f);
 }
 
 TEST(DcBlackrockDepthsVaultTest, DecideFollowsTheTriggerRules)

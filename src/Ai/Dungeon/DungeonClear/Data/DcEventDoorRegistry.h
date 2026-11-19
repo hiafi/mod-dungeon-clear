@@ -432,6 +432,32 @@ namespace DcEventDoorRegistry
             // 2026-11-19, STAGE-SMOKE2-DIAG).
             case 174565:  // Blackrock Depths — the Dark Coffer
                 return true;
+            // Blackrock Depths — the Black Vault's other shut door GOs. With the
+            // Dark Coffer ignored, the blocking-door value flagged the next shut
+            // door on the Vault route's last leg instead: Relic Coffer Door
+            // 174559, 4.1yd from VAULT_HOLD, lock 639 (Relic Coffer Key). Nobody
+            // holds that key, so the run auto-paused 13.8yd out, short of the
+            // event's 8yd arrive radius, and RunTheVault never ran (smoke run
+            // 2026-11-19, STAGE-SMOKE3-DIAG item 2). None of them is a corridor:
+            //   * the Secret Door (174553, lock 0) is instance-scripted —
+            //     instance_blackrock_depths opens it when TYPE_VAULT is DONE, so
+            //     a bot click would desync it;
+            //   * the twelve Relic Coffer Doors (174554-174564, 174566, lock 639)
+            //     are the Vault's loot alcoves, ringed round the room's rim.
+            case 174553:  // Blackrock Depths — Secret Door (the Vault)
+            case 174554:  // Blackrock Depths — Relic Coffer Doors (the Vault's alcoves)
+            case 174555:
+            case 174556:
+            case 174557:
+            case 174558:
+            case 174559:
+            case 174560:
+            case 174561:
+            case 174562:
+            case 174563:
+            case 174564:
+            case 174566:
+                return true;
             // Blackwing Lair — Chromaggus' cage Portcullis (179116, guid 75161
             // at (-7506.3,-1043.2,480.0)). The cage is opened from the RAID's
             // side by the Lever (179148, 65yd south), whose GossipHello does

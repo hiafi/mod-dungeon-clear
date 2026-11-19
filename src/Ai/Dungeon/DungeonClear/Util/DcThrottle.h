@@ -109,6 +109,8 @@ enum class DcThrottle : uint8
     BrdVaultCofferUse,   // floor between two Dark Coffer uses (the reworked Vault's
                          // trigger): one gossip, then let the instance answer
     BrdVaultKeyNudge,    // floor on walking a key-holding follower to the coffer
+    BrdHurleyGatherNudge, // floor on walking the stragglers to the tank before
+                          // Hurley's first keg (DcBrdHurleyWakeDecision.h)
     UbrsDoorArm,         // floor between two armings of the Dragonspire Hall (AT
                          // 2046's script + IP's door SetData): once per door attempt
     UbrsDoorClick,       // floor between two Dragonspine Door click fallbacks; its
