@@ -266,6 +266,7 @@ void DcTestRunJob::InitIdentity(Player* gm, DcTestDungeonRegistry::Row const& ro
         }
 
     _isScenario = DcTestDungeonRegistry::IsScenario(row);
+    _runItemId = row.runItemId;
     _focus = row.focusEntries;
     _success = row.success;
     _successGraceMs = row.successGraceS * 1000;
@@ -1592,6 +1593,10 @@ void DcTestRunJob::TickStarting()
         // previous run's extras and progress count would leak into this one.
         DcRun::Of(ctx).ClearTestTelemetry();
 
+        // A player-gated event the smoke run should still exercise (the row's
+        // runItemId: Blackrock Depths' Dark Keeper Key for the Vault).
+        GrantRunItem(tank);
+
         // RAID runs lean on the playerbots raid strategies for the boss fights
         // (DC stands down during encounters), and those attach by mapId only
         // when Playerbots.ApplyInstanceStrategies is on. A raid run with the
@@ -1652,6 +1657,38 @@ void DcTestRunJob::TickStarting()
 
     if (_stageMs >= START_TIMEOUT_MS)
         FailSetup("dc on did not take (look for 'DC command refused' in the DC log)");
+}
+
+// The row's run item (DcTestDungeonRegistry::Row::runItemId): ONE, to the tank,
+// once per run (called from the one-shot block before `dc on`), and only when
+// no member already carries one — a roster character who brought their own key
+// keeps the run at one. This is the whole of the waiver: the DC event that uses
+// the item finds it in the bags exactly as it would a looted one, so a live bot
+// group, which never passes through here, stays gated like players (user
+// ruling 2026-11-17, Blackrock Depths' Vault). The item is spent or kept by the
+// run like any other.
+void DcTestRunJob::GrantRunItem(Player* tank)
+{
+    if (!_runItemId || !tank)
+        return;
+    for (Slot const& slot : _slots)
+        if (Player* member = ObjectAccessor::FindPlayer(slot.guid))
+            if (member->HasItemCount(_runItemId, 1))
+            {
+                LOG_INFO("playerbots.dungeonclear",
+                         "TESTRUN {} run item {}: {} already carries one; none handed out",
+                         _record.runId, _runItemId, member->GetName());
+                return;
+            }
+    tank->AddItem(_runItemId, 1);
+    bool const got = tank->HasItemCount(_runItemId, 1);
+    if (got)
+        LOG_INFO("playerbots.dungeonclear", "TESTRUN {} run item {} handed to {}", _record.runId,
+                 _runItemId, tank->GetName());
+    else
+        LOG_WARN("playerbots.dungeonclear",
+                 "TESTRUN {} run item {} could not be stored on {} (bags full or item missing) — "
+                 "the event that wants it will skip", _record.runId, _runItemId, tank->GetName());
 }
 
 void DcTestRunJob::ApplyScenarioSkips(Player* tank, AiObjectContext* ctx)

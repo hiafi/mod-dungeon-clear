@@ -572,6 +572,10 @@ public:
     {
     }
     bool IsActive() override;
+
+private:
+    // The firing test proper; IsActive adds the trail-glide stop on top.
+    bool Wanted();
 };
 
 // ANY role, BOTH engines. Fires when the bot is standing inside the pulse of an
@@ -641,21 +645,6 @@ class DungeonClearHorStayAheadTrigger : public Trigger
 public:
     DungeonClearHorStayAheadTrigger(PlayerbotAI* botAI)
         : Trigger(botAI, "dungeon clear hor stay ahead", 1)
-    {
-    }
-    bool IsActive() override;
-};
-
-// BLACKROCK DEPTHS' IRON HALL ONLY: active for a member of a running clear that
-// is standing still in an Ironhand Guardian's fire (or whose spline ends in it),
-// and for as long as the hop to a fire-free stop is in flight. See DcIronHall
-// (Util/DcIronHallDecision.h). Free on every other map — the first test is an
-// integer compare on the map id.
-class DungeonClearIronHallSafeSpotTrigger : public Trigger
-{
-public:
-    DungeonClearIronHallSafeSpotTrigger(PlayerbotAI* botAI)
-        : Trigger(botAI, "dungeon clear iron hall safe spot", 1)
     {
     }
     bool IsActive() override;

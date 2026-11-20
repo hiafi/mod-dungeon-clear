@@ -90,7 +90,7 @@ DungeonWing const* DungeonWingRegistry::WingForLfgDungeon(uint32 mapId, uint32 l
     if (!layout || !lfgDungeonId)
         return nullptr;
     for (DungeonWing const& wing : layout->wings)
-        if (wing.lfgDungeonId == lfgDungeonId)
+        if (wing.lfgDungeonId == lfgDungeonId || wing.lfgHeroicDungeonId == lfgDungeonId)
             return &wing;
     return nullptr;
 }

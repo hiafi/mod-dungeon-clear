@@ -3,16 +3,16 @@
  * and/or modify it under version 3 of the License, or (at your option), any later version.
  */
 
-// Navmesh probe for the Blackrock Depths wing split (map 230): does an Upper
-// City run, which starts at the portal and never clears the Detention Block,
-// route clear of the Ring of Law?
+// Navmesh probe for the Blackrock Depths wing split (map 230): do the Finder
+// sections that never clear the Detention Block (2, 3 and 4, each from its own
+// start) route clear of the Ring of Law?
 //
 // The Ring of Law is a sealed arena run by area trigger 1526: a player crossing
 // the centre starts the gauntlet and slams the gates. A full-dungeon run went
-// through it on purpose (it is a Detention Block encounter). An Upper City run
-// must not stumble into it on the way to the Shadowforge Lock or beyond — if the
-// navmesh ever routes a leg across the arena floor, the Upper City needs a
-// wing-tagged DcNavPenaltyRegistry fence there, as Blackrock Spire has.
+// through it on purpose (it is a Detention Block encounter). A later section's
+// run must not stumble into it — if the navmesh ever routes a leg across the
+// arena floor, that section needs a wing-tagged DcNavPenaltyRegistry fence
+// there, as Blackrock Spire has.
 //
 // The suite also PRINTS each leg's closest approach to every Detention Block
 // boss, so a route that walks the party past one of them (a boss pull the run
@@ -52,16 +52,22 @@ namespace
     constexpr float ARENA_FLOOR_R = 25.0f;
     constexpr float ARENA_FLOOR_DZ = 8.0f;
 
-    // Portal, then the Upper City in its clear order (Shadowforge Lock first).
-    std::vector<Pt> const UPPER_CITY = {
-        { 456.93f,   34.09f, -68.09f, "portal" },
+    // Section 3 (the Manufactory) from its Finder start, in clear order.
+    std::vector<Pt> const MANUFACTORY = {
+        { 607.2f,   -47.8f,  -59.8f,  "S3 start" },
         { 615.61f,  -49.78f, -59.82f, "Shadowforge Lock" },
         { 652.4f,    21.4f,  -60.0f,  "Angerforge" },
         { 846.8f,    16.3f,  -53.6f,  "Argelmach" },
+    };
+
+    // Section 4 (the Imperial Seat) from S4b, in clear order (the bar's bosses
+    // at their spawns, Plugger at his camp past the Bar Door).
+    std::vector<Pt> const IMPERIAL_SEAT = {
+        { 843.8f,  -167.8f,  -49.7f,  "S4b" },
         { 878.1f,  -153.1f,  -49.8f,  "Hurley" },
-        { 869.0f,  -225.0f,  -43.7f,  "Phalanx" },
         { 878.5f,  -167.7f,  -49.7f,  "Ribbly" },
-        { 888.5f,  -177.9f,  -43.0f,  "Plugger" },
+        { 869.0f,  -225.0f,  -43.7f,  "Phalanx" },
+        { 871.0f,  -235.0f,  -43.27f, "Plugger camp" },
         { 1009.8f, -239.0f,  -61.3f,  "Flamelash" },
         { 1215.1f, -220.7f,  -85.6f,  "The Seven" },
         { 1380.7f, -659.3f,  -92.0f,  "Magmus" },
@@ -124,61 +130,73 @@ namespace
     }
 }
 
-TEST(BlackrockDepthsRouteProbe, UpperCityRouteStaysOutOfTheRingOfLaw)
+TEST(BlackrockDepthsRouteProbe, SectionsThreeAndFourStayOutOfTheRingOfLaw)
 {
     std::shared_ptr<dtNavMesh> mesh = LoadOrSkip();
     if (!mesh)
         GTEST_SKIP() << "DC_PROBE_MMAPS unset or map 230 mmaps missing";
 
-    std::printf("Blackrock Depths — Upper City legs (closest approach to the arena / Detention Block bosses)\n");
-    for (std::size_t i = 0; i + 1 < UPPER_CITY.size(); ++i)
+    for (std::vector<Pt> const* section : { &MANUFACTORY, &IMPERIAL_SEAT })
     {
-        Pt const from = SnapOrKeep(mesh.get(), UPPER_CITY[i]);
-        Pt const to = SnapOrKeep(mesh.get(), UPPER_CITY[i + 1]);
-        DcNavHarness::RouteResult const r =
-            DcNavHarness::Route(mesh.get(), BRD, from.x, from.y, from.z, to.x, to.y, to.z);
-        std::printf("  %-16s -> %-16s reachable=%d complete=%d len2d=%.1f pts=%zu %s\n", from.name, to.name,
-                    r.reachable, r.corridorComplete, r.routeLength2d, r.points.size(), r.failureReason.c_str());
-        EXPECT_TRUE(r.reachable) << from.name << " -> " << to.name;
+        std::vector<Pt> const& legs = *section;
+        std::printf("Blackrock Depths — %s legs (closest approach to the arena / Detention Block bosses)\n",
+                    legs[0].name);
+        for (std::size_t i = 0; i + 1 < legs.size(); ++i)
+        {
+            Pt const from = SnapOrKeep(mesh.get(), legs[i]);
+            Pt const to = SnapOrKeep(mesh.get(), legs[i + 1]);
+            DcNavHarness::RouteResult const r =
+                DcNavHarness::Route(mesh.get(), BRD, from.x, from.y, from.z, to.x, to.y, to.z);
+            std::printf("  %-16s -> %-16s reachable=%d complete=%d len2d=%.1f pts=%zu %s\n", from.name, to.name,
+                        r.reachable, r.corridorComplete, r.routeLength2d, r.points.size(), r.failureReason.c_str());
+            EXPECT_TRUE(r.reachable) << from.name << " -> " << to.name;
 
-        std::vector<G3D::Vector3> const walk = Densify(r.points);
-        float arenaMin = std::numeric_limits<float>::max();
-        for (G3D::Vector3 const& p : walk)
-        {
-            arenaMin = std::min(arenaMin, Dist3(p, ARENA));
-            EXPECT_FALSE(OnArenaFloor(p)) << from.name << " -> " << to.name << " crosses the Ring of Law at ("
-                                          << p.x << ", " << p.y << ", " << p.z << ")";
-        }
-        std::printf("      arena %.1fyd", arenaMin);
-        for (Pt const& boss : DETENTION_BLOCK)
-        {
-            float d = std::numeric_limits<float>::max();
+            std::vector<G3D::Vector3> const walk = Densify(r.points);
+            float arenaMin = std::numeric_limits<float>::max();
             for (G3D::Vector3 const& p : walk)
-                d = std::min(d, Dist3(p, boss));
-            if (d < 60.0f)
-                std::printf(" | %s %.1fyd", boss.name, d);
+            {
+                arenaMin = std::min(arenaMin, Dist3(p, ARENA));
+                EXPECT_FALSE(OnArenaFloor(p)) << from.name << " -> " << to.name << " crosses the Ring of Law at ("
+                                              << p.x << ", " << p.y << ", " << p.z << ")";
+            }
+            std::printf("      arena %.1fyd", arenaMin);
+            for (Pt const& boss : DETENTION_BLOCK)
+            {
+                float d = std::numeric_limits<float>::max();
+                for (G3D::Vector3 const& p : walk)
+                    d = std::min(d, Dist3(p, boss));
+                if (d < 60.0f)
+                    std::printf(" | %s %.1fyd", boss.name, d);
+            }
+            std::printf("\n");
         }
-        std::printf("\n");
     }
 }
 
-// The Upper City's event stand points (Data/Events/BlackrockDepthsEvents.cpp):
-// each must sit ON the navmesh (snapped within a couple of yards, on the right
-// floor) and be reachable from the one before it, in clear order. Doors are not
-// in the navmesh, so this proves geometry only — the events own the doors.
-TEST(BlackrockDepthsRouteProbe, UpperCityEventSpotsAreOnTheNavmesh)
+// Sections 3 and 4's starts and event stand points (Data/Events/
+// BlackrockDepthsEvents.cpp): each must sit ON the navmesh (snapped within a
+// couple of yards, on the right floor) and be reachable from the one before it,
+// in clear order. Doors are not in the navmesh, so this proves geometry only —
+// the events own the doors.
+TEST(BlackrockDepthsRouteProbe, SectionThreeAndFourSpotsAreOnTheNavmesh)
 {
     std::shared_ptr<dtNavMesh> mesh = LoadOrSkip();
     if (!mesh)
         GTEST_SKIP() << "DC_PROBE_MMAPS unset or map 230 mmaps missing";
 
     namespace B = DcBlackrockDepths;
-    std::vector<Pt> const spots = {
+    std::vector<Pt> const section3 = {
+        { B::S3_START_X, B::S3_START_Y, B::S3_START_Z, "S3 start" },
+        { 615.61f, -49.78f, -59.82f, "Shadowforge Lock" },
+        { 652.4f, 21.4f, -60.0f, "Angerforge" },
         { 846.8f, 16.3f, -53.6f, "Argelmach" },
+    };
+    std::vector<Pt> const section4 = {
+        { B::S4_START_X, B::S4_START_Y, B::S4_START_Z, "S4b" },
         { B::KEG_X, B::KEG_Y, B::KEG_Z, "Hurley's kegs" },
-        { 878.47f, -167.73f, -49.68f, "Ribbly" },
-        { B::ROCKNOT_HOLD_X, B::ROCKNOT_HOLD_Y, B::ROCKNOT_HOLD_Z, "Rocknot hold" },
-        { 868.97f, -224.98f, -43.72f, "Phalanx" },
+        { B::RIBBLY_X, B::RIBBLY_Y, B::RIBBLY_Z, "Ribbly" },
+        { B::PHALANX_SPAWN_X, B::PHALANX_SPAWN_Y, B::PHALANX_SPAWN_Z, "Phalanx's corner" },
+        { 868.97f, -224.98f, -43.72f, "Phalanx (door)" },
         { B::PLUGGER_CAMP_X, B::PLUGGER_CAMP_Y, B::PLUGGER_CAMP_Z, "Plugger camp" },
         { 1009.75f, -239.02f, -61.3f, "Flamelash" },
         { B::TOMB_HOLD_X, B::TOMB_HOLD_Y, B::TOMB_HOLD_Z, "Tomb garrison" },
@@ -197,163 +215,95 @@ TEST(BlackrockDepthsRouteProbe, UpperCityEventSpotsAreOnTheNavmesh)
         { 1380.18f, -831.65f, -87.59f, "Thaurissan" },
     };
 
-    std::printf("Blackrock Depths — Upper City event spots\n");
-    for (std::size_t i = 0; i < spots.size(); ++i)
+    for (std::vector<Pt> const* section : { &section3, &section4 })
     {
-        Pt const& want = spots[i];
-        G3D::Vector3 s;
-        bool const snapped = DcNavHarness::NearestPoint(mesh.get(), want.x, want.y, want.z, 4.0f, 6.0f, s);
-        float const off2d = snapped ? std::hypot(s.x - want.x, s.y - want.y) : -1.0f;
-        std::printf("  %-18s (%.1f, %.1f, %.2f) -> snapped=%d (%.2f, %.2f, %.2f) off2d=%.2f dz=%.2f\n",
-                    want.name, want.x, want.y, want.z, snapped, s.x, s.y, s.z, off2d,
-                    snapped ? s.z - want.z : 0.0f);
-        ASSERT_TRUE(snapped) << want.name << " is off the navmesh";
-        EXPECT_LT(off2d, 2.0f) << want.name;
-        EXPECT_LT(std::fabs(s.z - want.z), 2.5f) << want.name << " snapped to another floor";
-
-        if (i == 0)
-            continue;
-        Pt const from = SnapOrKeep(mesh.get(), spots[i - 1]);
-        DcNavHarness::RouteResult const r =
-            DcNavHarness::Route(mesh.get(), BRD, from.x, from.y, from.z, s.x, s.y, s.z);
-        std::printf("      from %-16s reachable=%d complete=%d len2d=%.1f %s\n", from.name, r.reachable,
-                    r.corridorComplete, r.routeLength2d, r.failureReason.c_str());
-        EXPECT_TRUE(r.reachable) << from.name << " -> " << want.name;
-    }
-}
-
-// The Iron Hall's safe-spot stops (DcIronHall): every slot on the hall floor,
-// and each stop walkable from the one before — the hop only ever walks between
-// neighbours.
-TEST(BlackrockDepthsRouteProbe, IronHallStopsAreOnTheFloorAndChained)
-{
-    std::shared_ptr<dtNavMesh> mesh = LoadOrSkip();
-    if (!mesh)
-        GTEST_SKIP() << "DC_PROBE_MMAPS unset or map 230 mmaps missing";
-
-    namespace B = DcBlackrockDepths;
-    for (uint32_t z = 0; z < B::IRON_HALL_ZONE_COUNT; ++z)
-        for (uint32_t s = 0; s < B::IRON_HALL_SLOT_COUNT; ++s)
+        std::vector<Pt> const& spots = *section;
+        std::printf("Blackrock Depths — %s event spots\n", spots[0].name);
+        for (std::size_t i = 0; i < spots.size(); ++i)
         {
-            float const x = B::IRON_HALL_ZONES[z].x + B::IRON_HALL_SLOT_OFFSETS[s].x;
-            float const y = B::IRON_HALL_ZONES[z].y + B::IRON_HALL_SLOT_OFFSETS[s].y;
-            G3D::Vector3 p;
-            bool const snapped = DcNavHarness::NearestPoint(mesh.get(), x, y, B::IRON_HALL_FLOOR_Z, 4.0f, 6.0f, p);
-            std::printf("  Iron Hall stop %u slot %u (%.1f, %.1f) -> snapped=%d off2d=%.2f z=%.2f\n", z, s, x, y,
-                        snapped, snapped ? std::hypot(p.x - x, p.y - y) : -1.0f, p.z);
-            ASSERT_TRUE(snapped) << "stop " << z << " slot " << s;
-            EXPECT_LT(std::hypot(p.x - x, p.y - y), 0.5f) << "stop " << z << " slot " << s;
-            EXPECT_LT(std::fabs(p.z - B::IRON_HALL_FLOOR_Z), 1.5f) << "stop " << z << " slot " << s;
-        }
-    for (uint32_t z = 1; z < B::IRON_HALL_ZONE_COUNT; ++z)
-    {
-        B::HallPoint const& a = B::IRON_HALL_ZONES[z - 1];
-        B::HallPoint const& b = B::IRON_HALL_ZONES[z];
-        DcNavHarness::RouteResult const r = DcNavHarness::Route(mesh.get(), BRD, a.x, a.y, B::IRON_HALL_FLOOR_Z,
-                                                                b.x, b.y, B::IRON_HALL_FLOOR_Z);
-        std::printf("  stop %u -> %u reachable=%d len2d=%.1f\n", z - 1, z, r.reachable, r.routeLength2d);
-        EXPECT_TRUE(r.reachable) << z - 1 << " -> " << z;
-        EXPECT_LT(r.routeLength2d, 1.2f * std::hypot(b.x - a.x, b.y - a.y)) << "a straight walk down the hall";
-    }
-}
-
-// Rocknot's hold must be OFF his escort (waypoint path 95030, from his spawn) —
-// a body-blocked npc_escortAI stalls the whole ale run — and off Phalanx, who
-// takes the Bar Door at the end of his own run (path 95020) and is fought there.
-TEST(DcBlackrockDepthsGeometry, RocknotHoldIsClearOfHisWalk)
-{
-    namespace B = DcBlackrockDepths;
-    struct P2 { float x, y; };
-    std::vector<P2> const walk = {
-        { 891.198f, -197.924f }, { 884.95f, -193.154f }, { 879.862f, -189.961f },
-        { 871.673f, -185.768f }, { 867.274f, -190.419f }, { 860.899f, -191.715f },
-        { 858.047f, -193.255f }, { 855.187f, -194.8f }, { 851.379f, -196.694f },
-    };
-    float best = std::numeric_limits<float>::max();
-    for (std::size_t i = 0; i + 1 < walk.size(); ++i)
-    {
-        // Distance from the hold to each leg of the walk.
-        float const ax = walk[i].x, ay = walk[i].y, bx = walk[i + 1].x, by = walk[i + 1].y;
-        float const dx = bx - ax, dy = by - ay;
-        float t = ((B::ROCKNOT_HOLD_X - ax) * dx + (B::ROCKNOT_HOLD_Y - ay) * dy) / (dx * dx + dy * dy);
-        t = std::clamp(t, 0.0f, 1.0f);
-        best = std::min(best, std::hypot(B::ROCKNOT_HOLD_X - (ax + t * dx), B::ROCKNOT_HOLD_Y - (ay + t * dy)));
-    }
-    // The hold radius plus a follower's trail behind the tank.
-    EXPECT_GT(best, B::ROCKNOT_HOLD_RADIUS + 6.0f) << "hold is " << best << "yd from Rocknot's walk";
-    EXPECT_GT(std::hypot(B::ROCKNOT_HOLD_X - B::PHALANX_DOOR_X, B::ROCKNOT_HOLD_Y - B::PHALANX_DOOR_Y), 12.0f)
-        << "hold crowds Phalanx in the doorway";
-}
-
-// Rocknot's ale is bought from Plugger, who patrols BEHIND his counter
-// (waypoint path 477030, delay 0 throughout), so the buy hook chases him and
-// trades the moment it is within interaction range. That only works if the
-// customer side of the counter has floor within reach of his walk: list the
-// reachable stand points within 4yd of it (from Rocknot's hold, on the bar's
-// upper floor).
-TEST(BlackrockDepthsRouteProbe, PluggerIsReachableAcrossHisCounter)
-{
-    std::shared_ptr<dtNavMesh> mesh = LoadOrSkip();
-    if (!mesh)
-        GTEST_SKIP() << "DC_PROBE_MMAPS unset or map 230 mmaps missing";
-
-    namespace B = DcBlackrockDepths;
-    struct P2 { float x, y; };
-    std::vector<P2> const patrol = {
-        { 888.236f, -177.809f }, { 886.791f, -175.185f }, { 886.586f, -174.894f },
-        { 878.133f, -179.536f }, { 886.578f, -174.768f }, { 888.454f, -177.985f },
-    };
-    constexpr float PLUGGER_Z = -42.96f;
-    auto distToPatrol = [&](float x, float y)
-    {
-        float best = std::numeric_limits<float>::max();
-        for (std::size_t i = 0; i + 1 < patrol.size(); ++i)
-        {
-            float const ax = patrol[i].x, ay = patrol[i].y;
-            float const dx = patrol[i + 1].x - ax, dy = patrol[i + 1].y - ay;
-            float const len2 = dx * dx + dy * dy;
-            float t = len2 > 0.0f ? ((x - ax) * dx + (y - ay) * dy) / len2 : 0.0f;
-            t = std::clamp(t, 0.0f, 1.0f);
-            best = std::min(best, std::hypot(x - (ax + t * dx), y - (ay + t * dy)));
-        }
-        return best;
-    };
-
-    Pt const hold = SnapOrKeep(mesh.get(), { B::ROCKNOT_HOLD_X, B::ROCKNOT_HOLD_Y, B::ROCKNOT_HOLD_Z, "hold" });
-    int found = 0;
-    float bestDist = std::numeric_limits<float>::max();
-    std::printf("Plugger's counter — reachable stand points within 4yd of his patrol\n");
-    for (float x = 872.0f; x <= 896.0f; x += 1.0f)
-        for (float y = -190.0f; y <= -168.0f; y += 1.0f)
-        {
-            float const d = distToPatrol(x, y);
-            if (d > 4.0f)
-                continue;
+            Pt const& want = spots[i];
             G3D::Vector3 s;
-            if (!DcNavHarness::NearestPoint(mesh.get(), x, y, PLUGGER_Z, 0.4f, 2.0f, s))
-                continue;
-            if (std::hypot(s.x - x, s.y - y) > 0.5f || std::fabs(s.z - PLUGGER_Z) > 1.5f)
-                continue;
-            DcNavHarness::RouteResult const r =
-                DcNavHarness::Route(mesh.get(), BRD, hold.x, hold.y, hold.z, s.x, s.y, s.z);
-            if (!r.reachable || !r.corridorComplete)
-                continue;
-            ++found;
-            bestDist = std::min(bestDist, d);
-            std::printf("  (%.1f, %.1f, %.2f) %.1fyd from his walk, route %.1fyd\n", s.x, s.y, s.z, d,
-                        r.routeLength2d);
-        }
-    EXPECT_GT(found, 0) << "no reachable floor within 4yd of Plugger's walk";
-    EXPECT_LT(bestDist, 3.0f);
+            bool const snapped = DcNavHarness::NearestPoint(mesh.get(), want.x, want.y, want.z, 4.0f, 6.0f, s);
+            float const off2d = snapped ? std::hypot(s.x - want.x, s.y - want.y) : -1.0f;
+            std::printf("  %-18s (%.1f, %.1f, %.2f) -> snapped=%d (%.2f, %.2f, %.2f) off2d=%.2f dz=%.2f\n",
+                        want.name, want.x, want.y, want.z, snapped, s.x, s.y, s.z, off2d,
+                        snapped ? s.z - want.z : 0.0f);
+            ASSERT_TRUE(snapped) << want.name << " is off the navmesh";
+            EXPECT_LT(off2d, 2.0f) << want.name;
+            EXPECT_LT(std::fabs(s.z - want.z), 2.5f) << want.name << " snapped to another floor";
 
-    // The stand point the buy hook waits on must be one of those.
-    G3D::Vector3 s;
-    ASSERT_TRUE(DcNavHarness::NearestPoint(mesh.get(), B::PLUGGER_STAND_X, B::PLUGGER_STAND_Y,
-                                           B::PLUGGER_STAND_Z, 0.4f, 2.0f, s));
-    EXPECT_LT(std::hypot(s.x - B::PLUGGER_STAND_X, s.y - B::PLUGGER_STAND_Y), 0.5f);
-    EXPECT_LT(std::fabs(s.z - B::PLUGGER_STAND_Z), 1.0f);
-    EXPECT_LT(distToPatrol(B::PLUGGER_STAND_X, B::PLUGGER_STAND_Y), 2.0f);
-    DcNavHarness::RouteResult const r =
-        DcNavHarness::Route(mesh.get(), BRD, hold.x, hold.y, hold.z, s.x, s.y, s.z);
-    EXPECT_TRUE(r.reachable && r.corridorComplete) << "Rocknot hold -> Plugger stand";
+            if (i == 0)
+                continue;
+            Pt const from = SnapOrKeep(mesh.get(), spots[i - 1]);
+            DcNavHarness::RouteResult const r =
+                DcNavHarness::Route(mesh.get(), BRD, from.x, from.y, from.z, s.x, s.y, s.z);
+            std::printf("      from %-16s reachable=%d complete=%d len2d=%.1f %s\n", from.name, r.reachable,
+                        r.corridorComplete, r.routeLength2d, r.failureReason.c_str());
+            EXPECT_TRUE(r.reachable) << from.name << " -> " << want.name;
+        }
+    }
+}
+
+// The reworked dungeon's section 2 ("brd-s2", Shadowforge City): a Finder group
+// lands at S2g, up in the Ring of Law's gallery, with the Ring NOT won — its gates are
+// shut, and the navmesh does not carry doors. Every leg of the section's clear
+// order must be reachable from S2g without crossing the arena floor (a route
+// through it would hit a closed gate in game, or pull the party into the
+// trial), and the two new stand points (S2g, the Vault's hold in front of the
+// Dark Coffer) must sit on the floor. Each leg PRINTS whether it uses the
+// spectator gallery that rings the arena (z -38 to -34). That is the expected
+// way to Loregrain, and it is not a fight: for a group whose instance starts
+// at S2g every gallery unit (spectators, citizens, the armed Anvilrage guards,
+// medics, officers, footmen and the senators) stands down (user ruling
+// 2026-11-17, the instance's flag), so the route walks through, not over them.
+TEST(BlackrockDepthsRouteProbe, ShadowforgeCityRunsFromS2gOutsideTheRingOfLaw)
+{
+    std::shared_ptr<dtNavMesh> mesh = LoadOrSkip();
+    if (!mesh)
+        GTEST_SKIP() << "DC_PROBE_MMAPS unset or map 230 mmaps missing";
+
+    namespace B = DcBlackrockDepths;
+    std::vector<Pt> const legs = {
+        { B::S2_START_X, B::S2_START_Y, B::S2_START_Z, "S2g" },
+        { 530.2f, -243.9f, -43.0f, "Loregrain" },
+        { B::STILGISS_X, B::STILGISS_Y, B::STILGISS_Z, "Stilgiss" },
+        { B::VAULT_HOLD_X, B::VAULT_HOLD_Y, B::VAULT_FLOOR_Z, "Vault hold" },
+        { B::FINEOUS_X, B::FINEOUS_Y, B::FINEOUS_Z, "Fineous" },
+        { 893.5f, -267.1f, -71.9f, "Incendius" },
+        { 702.4f, 184.5f, -72.0f, "Bael'Gar" },
+    };
+
+    for (Pt const& spot : { legs[0], legs[3] })
+    {
+        G3D::Vector3 s;
+        bool const snapped = DcNavHarness::NearestPoint(mesh.get(), spot.x, spot.y, spot.z, 4.0f, 6.0f, s);
+        std::printf("  %-12s (%.1f, %.1f, %.2f) -> snapped=%d (%.2f, %.2f, %.2f)\n", spot.name, spot.x, spot.y,
+                    spot.z, snapped, s.x, s.y, s.z);
+        ASSERT_TRUE(snapped) << spot.name << " is off the navmesh";
+        EXPECT_LT(std::hypot(s.x - spot.x, s.y - spot.y), 2.0f) << spot.name;
+        EXPECT_LT(std::fabs(s.z - spot.z), 2.5f) << spot.name << " snapped to another floor";
+    }
+
+    std::printf("Blackrock Depths — section 2 legs from S2g\n");
+    for (std::size_t i = 0; i + 1 < legs.size(); ++i)
+    {
+        Pt const from = SnapOrKeep(mesh.get(), legs[i]);
+        Pt const to = SnapOrKeep(mesh.get(), legs[i + 1]);
+        DcNavHarness::RouteResult const r =
+            DcNavHarness::Route(mesh.get(), BRD, from.x, from.y, from.z, to.x, to.y, to.z);
+        EXPECT_TRUE(r.reachable) << from.name << " -> " << to.name;
+
+        bool gallery = false;
+        float arenaMin = std::numeric_limits<float>::max();
+        for (G3D::Vector3 const& p : Densify(r.points))
+        {
+            arenaMin = std::min(arenaMin, Dist3(p, ARENA));
+            EXPECT_FALSE(OnArenaFloor(p)) << from.name << " -> " << to.name << " crosses the Ring of Law at ("
+                                          << p.x << ", " << p.y << ", " << p.z << ")";
+            float const dx = p.x - ARENA.x, dy = p.y - ARENA.y;
+            gallery = gallery || (std::sqrt(dx * dx + dy * dy) < 50.0f && p.z > -42.0f && p.z < -30.0f);
+        }
+        std::printf("  %-10s -> %-10s reachable=%d len2d=%.1f arena %.1fyd gallery=%d %s\n", from.name, to.name,
+                    r.reachable, r.routeLength2d, arenaMin, gallery, r.failureReason.c_str());
+    }
 }

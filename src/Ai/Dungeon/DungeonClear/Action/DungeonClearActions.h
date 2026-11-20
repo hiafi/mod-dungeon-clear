@@ -796,7 +796,8 @@ private:
 // can heal from — after which the stock heal stack re-acquires the target on its
 // own. Samples a ring of standoff points around the target and takes the nearest
 // one that is navmesh-valid, has LOS, and is path-reachable; falls back to a
-// pathfound approach toward the target (5yd standoff) when none validate. Banded
+// pathfound approach toward the target (5yd standoff) when none validate, and to
+// the leader tank's breadcrumb trail when that has no route either. Banded
 // COMBAT/NORMAL priority like the assist/regroup actions to avoid plowing a mob
 // train on a long run back. Driven by DungeonClearHealRepositionTrigger.
 class DungeonClearHealRepositionAction : public DcMovementAction
@@ -807,6 +808,12 @@ public:
     {
     }
     bool Execute(Event event) override;
+
+private:
+    // The last rung (no standoff, no route onto the target's floor, the target
+    // is the tank): walk the leader tank's breadcrumb trail back toward him, to
+    // the first crumb in heal range with LOS. True iff a move is in flight.
+    bool TrailTankForHeal(Unit* target, float healRange, float standoff);
 };
 
 // ANY role, BOTH engines. Moves the bot OUT of an active-vacate hazard emitter's
@@ -1016,20 +1023,6 @@ public:
     bool Execute(Event event) override;
 };
 
-// BLACKROCK DEPTHS' IRON HALL ONLY, every member, both engines: walk to a
-// fire-free stop rather than stand in the Ironhand Guardians' fire — in a fight,
-// the nearest one it can still hit its target from. Driven by
-// DungeonClearIronHallSafeSpotTrigger; the decision is DcIronHall::Decide.
-class DungeonClearIronHallSafeSpotAction : public DcMovementAction
-{
-public:
-    DungeonClearIronHallSafeSpotAction(PlayerbotAI* botAI)
-        : DcMovementAction(botAI, "dungeon clear iron hall safe spot")
-    {
-    }
-    bool Execute(Event event) override;
-};
-
 // BLACKROCK DEPTHS' LYCEUM ONLY, every member but the tank, combat engine: walk
 // back inside DcLyceumCloseUp::CLOSE_TO of the tank. Driven by
 // DungeonClearLyceumCloseUpTrigger; the decision is DcLyceumCloseUp::Decide.
@@ -1042,11 +1035,6 @@ public:
     }
     bool Execute(Event event) override;
 };
-
-// The Iron Hall's follow-tank clamp: true while `bot` should hold the stop the hop
-// put it on (or is still walking to it) rather than follow `tank`. Inert off map
-// 230. Implemented with the rung, in DcIronHallSafeSpotAction.cpp.
-bool DcIronHallHoldsFollow(Player* bot, PlayerbotAI* botAI, Player* tank);
 
 // THE OCULUS ONLY, every member, both engines: the rider rung — an essence from
 // the givers, the mount, this member's drake on its lane, the landing, the

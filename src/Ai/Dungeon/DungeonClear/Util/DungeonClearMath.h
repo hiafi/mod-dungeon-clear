@@ -76,6 +76,57 @@ namespace DungeonClearMath
         return StandoffCandidates(target, bot, standoffRadius, ringPoints);
     }
 
+    // The heal reposition's ladder (DungeonClearHealRepositionAction): a sampled
+    // standoff point with LOS and heal range, else a close on the target along
+    // its route (DcEngageGeometry::PathedCloseOn), else the LEADER TANK'S
+    // BREADCRUMB TRAIL. The trail rung is new: with no standoff and no complete
+    // route onto the target's floor the healer used to hold, out of range and
+    // sight, for as long as the fight lasted (BRD Phalanx, PHALANX-DIAG: 133
+    // failed repositions, the tank died unhealed). The tank's crumbs are ground
+    // he walked, so they lead back where a plain path query comes back
+    // incomplete. The trail only ever leads to the TANK, so it is taken only when
+    // the heal target is the tank (walking to the tank does nothing for a DPS on
+    // a ledge but pull the healer off her spot). A camp leash keeps the old
+    // holds: a leashed healer never takes a close past it, and never takes the
+    // trail (it leaves the camp by design). The action calls this only once the
+    // standoff sampling has failed (haveStandoff false); the Standoff rung is
+    // the ladder's first step for completeness and the tests.
+    enum class HealRepositionMove : std::uint8_t
+    {
+        Standoff,
+        PathedClose,
+        Trail,
+        Hold,
+    };
+
+    inline HealRepositionMove ChooseHealRepositionMove(bool haveStandoff, bool havePathedClose,
+                                                       bool leashed, bool closeWithinLeash,
+                                                       bool targetIsTank)
+    {
+        if (haveStandoff)
+            return HealRepositionMove::Standoff;
+        if (havePathedClose)
+            return (!leashed || closeWithinLeash) ? HealRepositionMove::PathedClose
+                                                  : HealRepositionMove::Hold;
+        return (!leashed && targetIsTank) ? HealRepositionMove::Trail : HealRepositionMove::Hold;
+    }
+
+    // Where the trail glide ends: the first window point past the healer's own
+    // live position (index 0) that `healable(i)` accepts (in heal range of the
+    // target with LOS), so the glide stops where she can heal instead of riding
+    // on to the window's end a few yards behind the tank, in the boss's melee
+    // and PBAoE ring. None accepted: the whole window (it ends `lag` yards back,
+    // and the caller passes a lag of at least the heal standoff). Returns the
+    // window size to keep (>= 2 when the window has 2+ points).
+    template <typename Healable>
+    std::size_t HealTrailWindowEnd(std::size_t windowSize, Healable&& healable)
+    {
+        for (std::size_t i = 1; i < windowSize; ++i)
+            if (healable(i))
+                return i + 1;
+        return windowSize;
+    }
+
     // The point `stopShort` yards before the END of a route polyline, measured
     // ALONG the route — the close-on-a-unit fallback for the heal reposition and
     // the combat regroup ("walk at them and let the corner give you sight").

@@ -37,6 +37,7 @@
 #include "Ai/Dungeon/DungeonClear/Util/DcEngageGeometry.h"
 #include "Ai/Dungeon/DungeonClear/Util/DcHazard.h"
 #include "Ai/Dungeon/DungeonClear/Util/DcLootPolicy.h"
+#include "Ai/Dungeon/DungeonClear/Util/DcMovement.h"
 #include "Ai/Dungeon/DungeonClear/Data/DcHazardRegistry.h"
 #include "Ai/Dungeon/DungeonClear/Util/DcNoStopZone.h"
 #include "Ai/Dungeon/DungeonClear/Util/DcPartyState.h"
@@ -1975,6 +1976,20 @@ bool DungeonClearBreakStuckCombatTrigger::IsActive()
     bool const phantom =
         DungeonClearMath::IsPhantomCombat(/*inCombat*/ true, hasAttacker, hasVictim, hasHolder);
 
+    // Not during a FIVE-MAN boss fight, where the raid stand-down above is never
+    // up (DC drives those fights). A healer knocked off the boss's floor reads as
+    // phantom combat here; clearing it sent her down the follow trail into a
+    // trash pack while the tank died unhealed (BRD Phalanx, PHALANX-DIAG). The
+    // heal reposition walks her back instead. A boss holding only THIS bot still
+    // counts as phantom (DcBossStandDown::HoldsFiveManBossFight). Asked only of a
+    // phantom tick, so a real fight never pays for the party walk.
+    if (phantom && DcBossStandDown::FiveManBossFightLive(bot))
+    {
+        stuckCombatSinceMs = 0;
+        holderCloseWatch.Reset();
+        return false;
+    }
+
     uint32 const timeoutMs =
         uint32(DcSettings::GetFloat(bot, "StuckCombatTimeout") * 1000.0f);
     return DungeonClearMath::ShouldBreakStuckCombat(phantom, getMSTime(), timeoutMs,
@@ -2131,6 +2146,27 @@ bool DungeonClearRegroupCombatTrigger::IsActive()
 }
 
 bool DungeonClearHealRepositionTrigger::IsActive()
+{
+    bool const wanted = Wanted();
+    // The action's breadcrumb glide (TrailTankForHeal) is one escort spline to a
+    // crumb in heal range; stop it the tick the reposition is no longer wanted
+    // (the tank is healable again, or there is in-sight heal work), so the healer
+    // casts instead of riding on: playerbots refuses cast-time spells while moving.
+    if (!wanted && bot)
+    {
+        DcApproachState& approach = context->GetValue<DcApproachState&>(DcKey::ApproachState)->Get();
+        if (approach.healTrailGlide)
+        {
+            approach.healTrailGlide = false;
+            MotionMaster* const mm = bot->GetMotionMaster();
+            if (mm && mm->GetCurrentMovementGeneratorType() == ESCORT_MOTION_TYPE && bot->isMoving())
+                DcMovement::StopBot(bot, DcMovement::Stop::Hold);
+        }
+    }
+    return wanted;
+}
+
+bool DungeonClearHealRepositionTrigger::Wanted()
 {
     if (!bot || bot->isDead())
         return false;

@@ -412,24 +412,25 @@ struct DcRunState
     // is walked back onto the add it left.
     bool   horFollowAdvancing = false;
 
-    // --- Blackrock Depths: the Iron Hall's safe-spot hop (map 230) -------------
-    //
-    // The hop in flight (DungeonClearIronHallSafeSpot): where this bot is going
-    // and when it set off (0 = none). While it is set the rung keeps the tick and
-    // the follow-tank clamp holds, so neither MoveChase nor the follow can turn
-    // the bot round halfway and park it back in the fire.
-    float  ironHallHopX = 0.0f;
-    float  ironHallHopY = 0.0f;
-    uint32 ironHallHopMs = 0;
-    // When this bot was first seen standing still in the fire (0 = it is not).
-    uint32 ironHallStillMs = 0;
-
     // --- Blackrock Depths: the Lyceum close-up (map 230) ----------------------
     //
     // When this bot started walking back inside DcLyceumCloseUp::CLOSE_TO of its
     // tank (0 = it is not closing up). The latch is the hysteresis: begun past
     // LEASH, the walk runs until CLOSE_TO, not until the bot crosses LEASH again.
     uint32 lyceumCloseUpMs = 0;
+
+    // --- Blackrock Depths: the Vault (map 230, RunTheVault) -------------------
+    //
+    // The muster clock: when the leader got back inside the rim with the Vault
+    // NOT_STARTED and the coffer in the grid (0 = not running), and the live
+    // clock: when the current attempt went live (0 = none). See
+    // DcBrdVault::NextMusterStamp / NextLiveStamp.
+    uint32 brdVaultMusterMs = 0;
+    uint32 brdVaultLiveMs = 0;
+    // Members last seen on the instance map carrying a Dark Keeper Key. Bags
+    // are read only for members on the leader's map (another map's members
+    // are updated on another map thread); one off the map counts by this.
+    std::vector<ObjectGuid> brdVaultKeyHolders;
 
     // --- The Culling of Stratholme: the ten waves (map 595) ------------------
     //

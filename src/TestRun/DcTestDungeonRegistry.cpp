@@ -64,17 +64,32 @@ namespace DcTestDungeonRegistry
             { "mara-purple",     "Maraudon: Purple Crystals",     349,   752.91f,  -616.53f,  -33.11f, 1.370f, 46, "Purple" },
             { "mara-pw",         "Maraudon: Pristine Waters",     349,   495.70f,    17.34f,  -96.31f, 3.119f, 48, "Pristine Waters" },
             { "st",              "The Temple of Atal'Hakkar",     109,  -319.24f,    99.90f, -131.85f, 3.190f, 52, "" },
-            // Blackrock Depths is two dungeons on one map (see BlackrockDepthsEvents):
-            // the Detention Block (Gerstahn -> Bael'Gar) and the Upper City
-            // (Shadowforge Lock, Angerforge -> Thaurissan). Both enter at the one
-            // portal, as the dungeon finder does. The retired `brd` token aliases
-            // to `brd-db`.
-            { "brd-db",          "Blackrock Depths: Detention Block", 230, 456.93f,  34.09f,  -68.09f, 4.712f, 54, "Detention Block" },
-            // The Upper City's no-progress net is wider than the global 600s: in
-            // the Lyceum a lost torch costs a 300s Flame Keeper respawn (plus the
+            // Blackrock Depths is several dungeons on one map (see
+            // BlackrockDepthsEvents), the reworked dungeon's four Finder
+            // sections. Each row enters where its Finder entry does and runs at
+            // its section's boss level: section 1, the Detention Block
+            // (Gerstahn -> the Ring of Law), at the portal; section 2,
+            // Shadowforge City (Loregrain -> Bael'Gar), at S2g in the Ring's
+            // gallery, with one Dark Keeper Key for the Vault (runItemId); section
+            // 3, the Manufactory (the Shadowforge Lock -> Argelmach), in the East
+            // Garrison by the lever; section 4, the Imperial Seat (the Grim
+            // Guzzler -> the Emperor), at S4b on the lower bar floor. The retired
+            // `brd` and `brd-db` (the stock Gerstahn -> Bael'Gar wing) tokens
+            // alias to `brd-s1`, `brd-uc` (the stock Upper City) to `brd-s4`.
+            { "brd-s1",          "Blackrock Depths: Detention Block", 230, 456.93f,  34.09f,  -68.09f, 4.712f, 52,
+              "Detention Block" },
+            { "brd-s2",          "Blackrock Depths: Shadowforge City", 230, DcBlackrockDepths::S2_START_X,
+              DcBlackrockDepths::S2_START_Y, DcBlackrockDepths::S2_START_Z, DcBlackrockDepths::S2_START_O, 53,
+              "Shadowforge City", 0, nullptr, {}, {}, 0, 0, 0, /*runItemId*/ DcBlackrockDepths::ITEM_DARK_KEEPER_KEY },
+            { "brd-s3",          "Blackrock Depths: Manufactory", 230, DcBlackrockDepths::S3_START_X,
+              DcBlackrockDepths::S3_START_Y, DcBlackrockDepths::S3_START_Z, DcBlackrockDepths::S3_START_O, 55,
+              "Manufactory" },
+            // Section 4's no-progress net is wider than the global 600s: in the
+            // Lyceum a lost torch costs a 300s Flame Keeper respawn (plus the
             // 330s torch-wait stall it is allowed) between two objective latches.
-            { "brd-uc",          "Blackrock Depths: Upper City",  230,   456.93f,    34.09f,  -68.09f, 4.712f, 58, "Upper City",
-              0, nullptr, {}, {}, 0, 0, /*noProgressS*/ 900 },
+            { "brd-s4",          "Blackrock Depths: Imperial Seat", 230, DcBlackrockDepths::S4_START_X,
+              DcBlackrockDepths::S4_START_Y, DcBlackrockDepths::S4_START_Z, DcBlackrockDepths::S4_START_O, 56,
+              "Imperial Seat", 0, nullptr, {}, {}, 0, 0, /*noProgressS*/ 900 },
             // Blackrock Spire is two dungeons on one map (see BlackrockSpireEvents).
             // LBRS enters at the shared portal; UBRS drops the party inside the
             // shared hall facing the Dragonspine Door (GO 164725), where a UBRS
@@ -199,7 +214,9 @@ namespace DcTestDungeonRegistry
     {
         static std::vector<Alias> const aliases = {
             { "brs", "lbrs" },   // Blackrock Spire before the LBRS/UBRS split
-            { "brd", "brd-db" }, // Blackrock Depths before the Detention Block/Upper City split
+            { "brd", "brd-s1" },    // Blackrock Depths before the Detention Block/Upper City split
+            { "brd-db", "brd-s1" }, // the stock Detention Block (to Bael'Gar), before the Finder sections
+            { "brd-uc", "brd-s4" }, // the stock Upper City (Lock -> Emperor), before the Finder sections
         };
         return aliases;
     }

@@ -1134,8 +1134,8 @@ void DcDungeonQueueFillJob::TickFormed()
     // LFG_STATE_FINISHED_DUNGEON is deliberately not a release. "Finished" is
     // LFG's word, not the dungeon's: FinishDungeon fires on whichever encounter
     // instance_encounters flags lastEncounterDungeon, and that is often not the
-    // last boss — the BRD Detention Block (LFG 30) finishes on Gerstahn, its
-    // FIRST boss; the Sunken Temple (LFG 28) on the Shade of Eranikus with
+    // last boss — the stock BRD Detention Block (LFG 30) finished on Gerstahn,
+    // its FIRST boss; the Sunken Temple (LFG 28) on the Shade of Eranikus with
     // Jammal'an's floor still standing. Releasing there left the player alone
     // mid-dungeon. The bots stay until the player leaves the group.
 
@@ -1160,8 +1160,10 @@ void DcDungeonQueueFillJob::TickFormed()
             DcStrategyGate::Reconcile(tank);
             // A map whose wing is chosen per run (Blackrock Spire/Depths,
             // Maraudon) takes it from the dungeon the group was actually formed
-            // for: LFG 32 is LBRS, 44 UBRS, 30 the BRD Detention Block, 276 the
-            // BRD Upper City, 26/272/273 Maraudon's Orange/Purple/Pristine Waters.
+            // for: LFG 32 is LBRS, 44 UBRS, 30 / 310 the BRD Detention Block,
+            // 308 / 311 Shadowforge City, 309 / 312 the Manufactory, 276 / 313
+            // the Imperial Seat, 26/272/273 Maraudon's Orange/Purple/Pristine
+            // Waters.
             // Latched before `dc on` so the run clears that wing.
             uint32 const lfgDungeon = sLFGMgr->GetDungeon(_formedGroupGuid);
             if (DungeonWing const* wing =

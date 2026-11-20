@@ -327,15 +327,15 @@ namespace DcEventDoorRegistry
             // loosely, so nobody walks past Chess to Prince.
             case 184277:  // Karazhan — Gamesman's Hall Exit Door (opens on Chess DONE)
             // Blackrock Depths (map 230) — the Bar Door (170571, lock 739, the
-            // Grim Guzzler Key). npc_rocknot breaks it to state 2 with his last
-            // kick; 7s later Phalanx is woken and runs to it, turning hostile
-            // when he arrives, and TYPE_BAR goes DONE. A click that
-            // opened it early would let the party walk out past a Phalanx who is
-            // still faction 35 — unattackable, and blocking his own credit. The
-            // key-item lock already refuses a bot without the key (only a
-            // pickpocketed Plugger drops it); this row keeps it refused if that
-            // ever changes. Map-230 event 5 owns it.
-            case 170571:  // Blackrock Depths — Bar Door (opens at the end of Rocknot's ale run)
+            // Grim Guzzler Key). The reworked instance opens it when Phalanx
+            // dies (his slot 12 DONE; npc_rocknot's ale run still blasts it to
+            // state 2 first when a player runs it). A click that opened it early
+            // would let the party walk out past a Phalanx who is still faction
+            // 35 — unattackable, and blocking his own credit. The key-item lock
+            // already refuses a bot without the key (only a pickpocketed Plugger
+            // drops it); this row keeps it refused if that ever changes. Map-230
+            // event 5 (Phalanx's challenge) and the Phalanx row own it.
+            case 170571:  // Blackrock Depths — Bar Door (opens on Phalanx's death)
             // The Summoner's Tomb doors, both empty-lock-85 and both driven only by
             // instance_blackrock_depths' TYPE_TOMB_OF_SEVEN: IN_PROGRESS shuts both,
             // DONE opens both, a reset reopens the entrance. 170576 spawns open, so
@@ -421,6 +421,42 @@ namespace DcEventDoorRegistry
         {
             case 184393:  // Old Hillsbrad — Thrall's Prison Door (gossip through
                           // the gate; his script opens it via EVENT_OPEN_DOORS)
+                return true;
+            // Blackrock Depths — the Dark Coffer (174565), a door-type GO in
+            // the Black Vault. Opening it with the Dark Keeper Key STARTS the
+            // reworked Vault encounter, so only RunTheVault (event 9) may use
+            // it, once the party has mustered. Left unlisted, the generic
+            // door rung opened it on sight (the tank held the key), started
+            // the Vault mid-walk and kept the run stalled on "Opening the door
+            // to The Vault." until the harness timed it out (smoke run
+            // 2026-11-19, STAGE-SMOKE2-DIAG).
+            case 174565:  // Blackrock Depths — the Dark Coffer
+                return true;
+            // Blackrock Depths — the Black Vault's other shut door GOs. With the
+            // Dark Coffer ignored, the blocking-door value flagged the next shut
+            // door on the Vault route's last leg instead: Relic Coffer Door
+            // 174559, 4.1yd from VAULT_HOLD, lock 639 (Relic Coffer Key). Nobody
+            // holds that key, so the run auto-paused 13.8yd out, short of the
+            // event's 8yd arrive radius, and RunTheVault never ran (smoke run
+            // 2026-11-19, STAGE-SMOKE3-DIAG item 2). None of them is a corridor:
+            //   * the Secret Door (174553, lock 0) is instance-scripted —
+            //     instance_blackrock_depths opens it when TYPE_VAULT is DONE, so
+            //     a bot click would desync it;
+            //   * the twelve Relic Coffer Doors (174554-174564, 174566, lock 639)
+            //     are the Vault's loot alcoves, ringed round the room's rim.
+            case 174553:  // Blackrock Depths — Secret Door (the Vault)
+            case 174554:  // Blackrock Depths — Relic Coffer Doors (the Vault's alcoves)
+            case 174555:
+            case 174556:
+            case 174557:
+            case 174558:
+            case 174559:
+            case 174560:
+            case 174561:
+            case 174562:
+            case 174563:
+            case 174564:
+            case 174566:
                 return true;
             // Blackwing Lair — Chromaggus' cage Portcullis (179116, guid 75161
             // at (-7506.3,-1043.2,480.0)). The cage is opened from the RAID's

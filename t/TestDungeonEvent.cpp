@@ -8,11 +8,14 @@
 #include <algorithm>
 #include <cmath>
 
+#include "Ai/Dungeon/DungeonClear/Data/DcEventDoorRegistry.h"
 #include "Ai/Dungeon/DungeonClear/Data/DungeonEventRegistry.h"
 #include "Ai/Dungeon/DungeonClear/Data/Events/DungeonEventTables.h"
 #include "Ai/Dungeon/DungeonClear/Overrides/BossRosterRegistry.h"
 #include "Ai/Dungeon/DungeonClear/Overrides/ObjectiveHookRegistry.h"
 #include "Ai/Dungeon/DungeonClear/Util/DungeonEventExecutor.h"
+#include "Ai/Dungeon/DungeonClear/Util/DcBrdHurleyWakeDecision.h"
+#include "Ai/Dungeon/DungeonClear/Util/DcBrdVaultDecision.h"
 #include "Ai/Dungeon/DungeonClear/Util/DcLyceumCloseUpDecision.h"
 #include "Ai/Dungeon/DungeonClear/Util/DcPackLeashDecision.h"
 
@@ -587,10 +590,435 @@ TEST(DungeonEventRegistryTest, BlackrockRingOfLawEventShape)
     EXPECT_EQ(e->steps[2].kind, EventStepKind::MoveTo);
     EXPECT_EQ(e->steps[2].instanceDataId, 1);    // TYPE_RING_OF_LAW
     EXPECT_EQ(e->steps[2].instanceDataMin, 3u);  // EncounterState::DONE
-    EXPECT_EQ(e->steps[2].timeoutMs, 600000u);
+    // The rework: an opener wave and two champions, credit after the second
+    // (or after the Encore), and a wipe resets the whole trial.
+    EXPECT_EQ(e->steps[2].timeoutMs, DcBlackrockDepths::RING_TIMEOUT_MS);
+    EXPECT_GE(e->steps[2].timeoutMs, 900000u);
     EXPECT_EQ(e->steps[2].hookId, 1u);           // .WhileHolding(EnsureRingStarted)
     EXPECT_FLOAT_EQ(e->steps[2].radius, e->steps[0].radius)
         << "walk-in and hold must agree on where the centre is";
+}
+
+// Blackrock Depths' reworked Vault (map 230 event 9, Finder section 2): an
+// optional, persistent anchored event between Stilgiss and Fineous whose one
+// Custom step (hook 66, RunTheVault) does the whole thing between fights. It
+// must be OPTIONAL — its timeout (a party that cannot win it) skips it instead of
+// stalling the run — and PERSISTENT — the fight is a Drive gap.
+TEST(DungeonEventRegistryTest, BlackrockVaultEventShape)
+{
+    namespace B = DcBlackrockDepths;
+    DungeonEvent const* e = DungeonEventRegistry::Find(230, B::EVENT_VAULT);
+    ASSERT_NE(e, nullptr);
+    EXPECT_EQ(e->activation, EventActivation::Anchored);
+    EXPECT_TRUE(e->persistent);
+    EXPECT_FALSE(e->required) << "the Vault is optional: its timeout must skip, not stall";
+
+    ASSERT_EQ(e->steps.size(), 2u);
+    EXPECT_EQ(e->steps[0].kind, EventStepKind::MoveTo);
+    EXPECT_FLOAT_EQ(e->steps[0].x, B::VAULT_HOLD_X);
+    EXPECT_FLOAT_EQ(e->steps[0].y, B::VAULT_HOLD_Y);
+    EXPECT_EQ(e->steps[1].kind, EventStepKind::Custom);
+    EXPECT_EQ(e->steps[1].hookId, B::HOOK_RUN_THE_VAULT);
+    EXPECT_EQ(e->steps[1].timeoutMs, B::VAULT_TIMEOUT_MS);
+    EXPECT_TRUE(ObjectiveHookRegistry::Has(B::HOOK_RUN_THE_VAULT));
+    // The muster wait fits well inside the step.
+    EXPECT_LT(B::VAULT_MUSTER_WAIT_MS * 4, B::VAULT_TIMEOUT_MS);
+
+    // The hold spot is inside the rim (on the floor the muster counts), in reach
+    // of the coffer (804.3, -356.1), and 10yd off the centre.
+    EXPECT_TRUE(DcBrdVault::InsideRim(B::VAULT_HOLD_X, B::VAULT_HOLD_Y, B::VAULT_FLOOR_Z));
+    EXPECT_LT(std::hypot(B::VAULT_HOLD_X - 804.3f, B::VAULT_HOLD_Y - -356.1f), 3.0f);
+    EXPECT_LT(std::hypot(B::VAULT_HOLD_X - 804.3f, B::VAULT_HOLD_Y - -356.1f) + B::VAULT_HOLD_RADIUS,
+              B::VAULT_KEY_REACH);
+    EXPECT_NEAR(std::hypot(B::VAULT_HOLD_X - B::VAULT_CENTER_X, B::VAULT_HOLD_Y - B::VAULT_CENTER_Y), 10.0f,
+                0.5f);
+    // The room's entrance (Doomgrip's summon spot, 11.4yd out) is outside the
+    // muster ring, so a member standing in the doorway is not "inside".
+    EXPECT_FALSE(DcBrdVault::InsideRim(821.905f, -338.382f, -50.134f));
+    // A floor above or below is not inside.
+    EXPECT_FALSE(DcBrdVault::InsideRim(B::VAULT_CENTER_X, B::VAULT_CENTER_Y, B::VAULT_FLOOR_Z + 10.0f));
+}
+
+// The Vault's decision, row by row (DcBrdVaultDecision.h).
+// The Dark Coffer is a door-type GO whose opening STARTS the Vault: only
+// RunTheVault may use it, so navigation's door rung must never open it on
+// sight (smoke run 2026-11-19: the tank held the key, the rung opened it
+// mid-walk and the run stalled on "Opening the door to The Vault.").
+TEST(DcBlackrockDepthsVaultTest, TheDarkCofferIsNavigationIgnored)
+{
+    EXPECT_EQ(DcBlackrockDepths::GO_DARK_COFFER_DOOR, 174565u);
+    EXPECT_TRUE(DcEventDoorRegistry::IsNavigationIgnored(DcBlackrockDepths::GO_DARK_COFFER_DOOR));
+
+    // ... and so are the Vault's other shut doors, or the blocking-door value
+    // flags the next one on the route's last leg (smoke run 2026-11-19: Relic
+    // Coffer Door 174559, lock 639, auto-paused the run 13.8yd from the hold
+    // spot, short of the event's 8yd arrive radius). The Secret Door 174553 is
+    // instance-scripted; 174554-174564 and 174566 are the Relic Coffer Doors.
+    EXPECT_TRUE(DcEventDoorRegistry::IsNavigationIgnored(174553));
+    for (uint32 relicDoor = 174554; relicDoor <= 174564; ++relicDoor)
+        EXPECT_TRUE(DcEventDoorRegistry::IsNavigationIgnored(relicDoor)) << relicDoor;
+    EXPECT_TRUE(DcEventDoorRegistry::IsNavigationIgnored(174566));
+    // The Vault's chairs (174550-174552) are not doors, and the Vault's
+    // neighbours are not swept up with it.
+    EXPECT_FALSE(DcEventDoorRegistry::IsNavigationIgnored(174552));
+    EXPECT_FALSE(DcEventDoorRegistry::IsNavigationIgnored(174567));
+}
+
+// Hurley's wake ends in an attack on the nearest player: the party gathers on
+// the tank before the first keg, bounded (smoke run 2026-11-19: the healer
+// stood 8yd from his walk end, the tank 25yd away, and the party wiped in 13 s).
+TEST(DcBlackrockDepthsHurleyTest, TheFirstKegWaitsForTheGather)
+{
+    namespace H = DcBrdHurleyWake;
+    using H::Gate;
+    uint32 const start = 100000;
+
+    EXPECT_FALSE(H::Straggles(H::GATHER_RADIUS));
+    EXPECT_TRUE(H::Straggles(H::GATHER_RADIUS + 0.1f));
+
+    // Everyone gathered: wake at once.
+    EXPECT_EQ(H::Decide(false, 0, start, start), Gate::Wake);
+    // A straggler holds the first keg, up to the wait.
+    EXPECT_EQ(H::Decide(false, 1, start, start), Gate::Gather);
+    EXPECT_EQ(H::Decide(false, 4, start, start + H::GATHER_WAIT_MS - 1), Gate::Gather);
+    // Past it, the keg is used anyway.
+    EXPECT_EQ(H::Decide(false, 1, start, start + H::GATHER_WAIT_MS), Gate::WakeUngathered);
+    // A keg already used: the chain is under way, never held.
+    EXPECT_EQ(H::Decide(true, 3, start, start), Gate::Wake);
+    // The clock wraps with getMSTime.
+    EXPECT_EQ(H::Decide(false, 1, 0xFFFFFF00u, 0x00000010u), Gate::Gather);
+
+    // The walk aims inside the radius, on the straggler's own side of the tank.
+    H::Aim const a = H::AimFor(20.0f, 0.0f, 0.0f, 0.0f);
+    EXPECT_NEAR(a.x, H::GATHER_AIM, 0.001f);
+    EXPECT_NEAR(a.y, 0.0f, 0.001f);
+    EXPECT_FALSE(H::Straggles(std::hypot(a.x, a.y)));
+    H::Aim const close = H::AimFor(1.0f, 1.0f, 0.0f, 0.0f);
+    EXPECT_FLOAT_EQ(close.x, 1.0f);
+    EXPECT_FLOAT_EQ(close.y, 1.0f);
+}
+
+TEST(DcBlackrockDepthsVaultTest, DecideFollowsTheTriggerRules)
+{
+    namespace B = DcBlackrockDepths;
+    using DcBrdVault::Action;
+    using DcBrdVault::Decide;
+
+    // A party at a shut coffer with a bot's key, warders dead, everyone inside.
+    DcBrdVault::View ready;
+    ready.vaultState = B::STATE_NOT_STARTED;
+    ready.wardersState = B::STATE_DONE;
+    ready.cofferLoaded = true;
+    ready.cofferOpen = false;
+    ready.keyOnBot = true;
+    ready.keyInReach = true;
+    ready.mustered = true;
+    EXPECT_EQ(Decide(ready), Action::Open);
+
+    DcBrdVault::View v = ready;
+    v.vaultState = B::STATE_DONE;
+    EXPECT_EQ(Decide(v), Action::Finish);
+
+    v = ready;
+    v.vaultState = B::STATE_IN_PROGRESS;
+    EXPECT_EQ(Decide(v), Action::Hold);
+    v.vaultState = 2;   // FAIL, settling back to NOT_STARTED
+    EXPECT_EQ(Decide(v), Action::Hold);
+    v.vaultState = 5;   // TO_BE_DECIDED before the instance's first Update
+    EXPECT_EQ(Decide(v), Action::Hold);
+
+    // Warders alive (or a stock instance with no slot 6) with no sign of a
+    // settling fight: the instance would refuse the trigger, so the event is
+    // skipped, key or no key.
+    v = ready;
+    v.wardersState = B::STATE_IN_PROGRESS;
+    EXPECT_EQ(Decide(v), Action::Skip);
+    v.wardersState = 5;
+    EXPECT_EQ(Decide(v), Action::Skip);
+
+    // No key and a shut coffer: skipped. No key but an OPEN coffer (a human
+    // opened it, or a wipe reset the Vault): its gossip restarts the Vault.
+    v = ready;
+    v.keyOnBot = false;
+    v.keyInReach = false;
+    EXPECT_EQ(Decide(v), Action::Skip);
+    v.cofferOpen = true;
+    EXPECT_EQ(Decide(v), Action::Open);
+
+    // The coffer not in the grid yet: wait, never skip on it.
+    v = ready;
+    v.cofferLoaded = false;
+    EXPECT_EQ(Decide(v), Action::Hold);
+
+    // Someone outside the rim (or dead, or away): muster, until the wait runs out.
+    v = ready;
+    v.mustered = false;
+    EXPECT_EQ(Decide(v), Action::Muster);
+    v.musterExpired = true;
+    EXPECT_EQ(Decide(v), Action::Open);
+
+    // The key is on a bot but not at the coffer: bring it. Once the coffer is
+    // open the key is not needed.
+    v = ready;
+    v.keyInReach = false;
+    EXPECT_EQ(Decide(v), Action::BringKey);
+    v.cofferOpen = true;
+    EXPECT_EQ(Decide(v), Action::Open);
+}
+
+// R-1-B m6 + the user ruling (2026-11-17): a human's Dark Keeper Key is the
+// human's to use. DC never opens the shut coffer for them: it holds and waits,
+// whether or not the human stands at the coffer. A bot's own key still opens.
+TEST(DcBlackrockDepthsVaultTest, AHumansKeyIsWaitedForNeverUsed)
+{
+    namespace B = DcBlackrockDepths;
+    using DcBrdVault::Action;
+    using DcBrdVault::Decide;
+
+    DcBrdVault::View v;
+    v.vaultState = B::STATE_NOT_STARTED;
+    v.wardersState = B::STATE_DONE;
+    v.cofferLoaded = true;
+    v.keyOnHuman = true;
+    v.mustered = true;
+    EXPECT_EQ(Decide(v), Action::WaitForHuman);
+    v.musterExpired = true;
+    EXPECT_EQ(Decide(v), Action::WaitForHuman) << "an expired muster must not open it either";
+    v.keyInReach = true;    // (only ever set for a bot holder)
+    EXPECT_EQ(Decide(v), Action::WaitForHuman);
+
+    // The human opened it: the attempt runs; after a wipe the open coffer's
+    // gossip restarts it without anyone's key.
+    v.cofferOpen = true;
+    EXPECT_EQ(Decide(v), Action::Open);
+    v.vaultState = B::STATE_IN_PROGRESS;
+    EXPECT_EQ(Decide(v), Action::Hold);
+
+    // A bot carries one too: the bot opens (opening never spends a key).
+    v = DcBrdVault::View{};
+    v.wardersState = B::STATE_DONE;
+    v.cofferLoaded = true;
+    v.keyOnHuman = true;
+    v.keyOnBot = true;
+    v.keyInReach = true;
+    v.mustered = true;
+    EXPECT_EQ(Decide(v), Action::Open);
+}
+
+// R-1-B m10: a key on a dead (or away) member is not "no key": hold for them.
+TEST(DcBlackrockDepthsVaultTest, AKeyOnADeadMemberIsWaitedFor)
+{
+    namespace B = DcBlackrockDepths;
+    using DcBrdVault::Action;
+    using DcBrdVault::Decide;
+
+    DcBrdVault::View v;
+    v.wardersState = B::STATE_DONE;
+    v.cofferLoaded = true;
+    v.keyOnAbsent = true;
+    EXPECT_EQ(Decide(v), Action::WaitForKey);
+    v.keyOnHuman = true;    // a living human's key wins the wait's wording
+    EXPECT_EQ(Decide(v), Action::WaitForHuman);
+    v.keyOnHuman = false;
+    v.keyOnBot = true;      // a living bot's key does not wait at all
+    v.mustered = true;
+    v.keyInReach = true;
+    EXPECT_EQ(Decide(v), Action::Open);
+    v.keyOnBot = false;
+    v.keyOnAbsent = false;
+    EXPECT_EQ(Decide(v), Action::Skip);
+}
+
+// R-1-B m9: Stilgiss's credit bit set (or a warder still standing near the
+// Vault) while slot 6 is not DONE yet is a fight settling, not "the warders
+// live": hold, never latch a Skip for the whole run.
+TEST(DcBlackrockDepthsVaultTest, SettlingWardersHoldInsteadOfSkipping)
+{
+    namespace B = DcBlackrockDepths;
+    using DcBrdVault::Action;
+    using DcBrdVault::Decide;
+
+    DcBrdVault::View v;
+    v.wardersState = B::STATE_IN_PROGRESS;
+    v.wardersSettling = true;
+    v.cofferLoaded = true;
+    v.keyOnBot = true;
+    EXPECT_EQ(Decide(v), Action::Hold);
+    v.wardersState = B::STATE_NOT_STARTED;  // evaded: the slot fell back
+    EXPECT_EQ(Decide(v), Action::Hold);
+    v.wardersSettling = false;
+    EXPECT_EQ(Decide(v), Action::Skip);
+    v.wardersState = B::STATE_DONE;
+    v.mustered = true;
+    v.keyInReach = true;
+    EXPECT_EQ(Decide(v), Action::Open);
+}
+
+// R-1-B m7 / m8: the step clock is re-stamped while an attempt is live (the
+// timeout counts only time between attempts), and a party that keeps losing
+// gives up after VAULT_MAX_ATTEMPTS.
+TEST(DcBlackrockDepthsVaultTest, AttemptsAreBoundedAndFightsDoNotBurnTheTimeout)
+{
+    namespace B = DcBlackrockDepths;
+    using DcBrdVault::Action;
+    using DcBrdVault::AttemptLive;
+    using DcBrdVault::Decide;
+
+    EXPECT_FALSE(AttemptLive(B::STATE_NOT_STARTED));
+    EXPECT_TRUE(AttemptLive(B::STATE_IN_PROGRESS));
+    EXPECT_TRUE(AttemptLive(2));    // FAIL settling
+    EXPECT_TRUE(AttemptLive(5));    // TO_BE_DECIDED
+    EXPECT_FALSE(AttemptLive(B::STATE_DONE));
+
+    DcBrdVault::View v;
+    v.wardersState = B::STATE_DONE;
+    v.cofferLoaded = true;
+    v.cofferOpen = true;            // after a wipe: the coffer stays open
+    v.mustered = true;
+    v.failedAttempts = B::VAULT_MAX_ATTEMPTS - 1;
+    EXPECT_EQ(Decide(v), Action::Open);
+    v.failedAttempts = B::VAULT_MAX_ATTEMPTS;
+    EXPECT_EQ(Decide(v), Action::Skip);
+    v.vaultState = B::STATE_IN_PROGRESS;   // the cap never ends a live attempt
+    EXPECT_EQ(Decide(v), Action::Hold);
+    v.vaultState = B::STATE_DONE;
+    EXPECT_EQ(Decide(v), Action::Finish);
+
+    // The between-attempts budget fits a corpse run from S2g (about 750yd).
+    EXPECT_GE(B::VAULT_TIMEOUT_MS, 300000u);
+}
+
+// R-2-B MJ-2: after a wipe the leader respawns at S2g and the run back takes
+// about 110 s, with the hook ticking all the way. The muster wait must be
+// timed from the leader's return, not from the Vault going NOT_STARTED, or
+// the bot key holder opens the coffer with the party still at the entrance.
+TEST(DcBlackrockDepthsVaultTest, TheMusterIsTimedFromTheLeadersReturn)
+{
+    namespace B = DcBlackrockDepths;
+    using DcBrdVault::Action;
+    using DcBrdVault::Decide;
+    using DcBrdVault::MusterExpired;
+    using DcBrdVault::NextMusterStamp;
+
+    uint32 stamp = 0;
+    uint32 now = 1000000;
+    // The wipe: the attempt is live, then settles (FAIL) -> no muster clock.
+    stamp = NextMusterStamp(stamp, B::STATE_IN_PROGRESS, true, true, now);
+    EXPECT_EQ(stamp, 0u);
+    stamp = NextMusterStamp(stamp, 2, true, false, now += 5000);
+    EXPECT_EQ(stamp, 0u);
+    // NOT_STARTED, the leader at S2g: the coffer is out of the grid for 120 s.
+    for (int i = 0; i < 120; ++i)
+    {
+        stamp = NextMusterStamp(stamp, B::STATE_NOT_STARTED, false, false, now += 1000);
+        EXPECT_EQ(stamp, 0u);
+        EXPECT_FALSE(MusterExpired(stamp, now));
+    }
+
+    // Back in the coffer's scan, the party still outside the rim: Muster, not
+    // Open, and the clock has not started while the leader is outside too.
+    DcBrdVault::View v;
+    v.wardersState = B::STATE_DONE;
+    v.cofferLoaded = true;
+    v.keyOnBot = true;
+    v.keyInReach = true;
+    v.mustered = false;
+    stamp = NextMusterStamp(stamp, B::STATE_NOT_STARTED, true, false, now += 1000);
+    v.musterExpired = MusterExpired(stamp, now);
+    EXPECT_EQ(stamp, 0u);
+    EXPECT_EQ(Decide(v), Action::Muster) << "the walk back must not have used the muster wait up";
+
+    // The leader steps inside the rim: the wait starts now, and runs its full
+    // length while the others are still coming.
+    stamp = NextMusterStamp(stamp, B::STATE_NOT_STARTED, true, true, now += 1000);
+    uint32 const back = now;
+    EXPECT_EQ(stamp, back);
+    stamp = NextMusterStamp(stamp, B::STATE_NOT_STARTED, true, true, now = back + B::VAULT_MUSTER_WAIT_MS - 1);
+    v.musterExpired = MusterExpired(stamp, now);
+    EXPECT_EQ(Decide(v), Action::Muster);
+    // The leader stepping out of the rim within the coffer's scan (walking a
+    // key in) keeps the clock: it never restarts on the doorstep.
+    stamp = NextMusterStamp(stamp, B::STATE_NOT_STARTED, true, false, now);
+    EXPECT_EQ(stamp, back);
+    // Everybody home: open at once. Nobody comes: open when the wait is out.
+    v.mustered = true;
+    EXPECT_EQ(Decide(v), Action::Open);
+    v.mustered = false;
+    stamp = NextMusterStamp(stamp, B::STATE_NOT_STARTED, true, true, now = back + B::VAULT_MUSTER_WAIT_MS);
+    v.musterExpired = MusterExpired(stamp, now);
+    EXPECT_EQ(Decide(v), Action::Open);
+
+    // The next wipe clears it again, and losing the coffer from the grid too.
+    EXPECT_EQ(NextMusterStamp(stamp, B::STATE_IN_PROGRESS, true, true, now), 0u);
+    EXPECT_EQ(NextMusterStamp(stamp, B::STATE_NOT_STARTED, false, false, now), 0u);
+    // A stamp is never 0 (0 means "not running"), even at getMSTime() == 0.
+    EXPECT_NE(NextMusterStamp(0, B::STATE_NOT_STARTED, true, true, 0), 0u);
+    // And the clock wraps safely.
+    uint32 const late = 0xFFFFFF00u;
+    EXPECT_TRUE(MusterExpired(late, late + B::VAULT_MUSTER_WAIT_MS));
+    EXPECT_FALSE(MusterExpired(late, late + B::VAULT_MUSTER_WAIT_MS - 1));
+}
+
+// R-2-B MN-2: a live attempt holds the step clock for
+// VAULT_ATTEMPT_LIVE_CAP_MS at most (a warder kept in combat by a stuck unit
+// would hold TYPE_VAULT IN_PROGRESS forever); every new attempt gets a fresh
+// cap, and the clock is cleared between attempts.
+TEST(DcBlackrockDepthsVaultTest, ALiveAttemptHoldsTheTimeoutOnlyUpToTheCap)
+{
+    namespace B = DcBlackrockDepths;
+    using DcBrdVault::HoldsStepClock;
+    using DcBrdVault::NextLiveStamp;
+
+    uint32 now = 5000;
+    uint32 live = NextLiveStamp(0, B::STATE_NOT_STARTED, now);
+    EXPECT_EQ(live, 0u);
+    EXPECT_FALSE(HoldsStepClock(live, now));
+
+    live = NextLiveStamp(live, B::STATE_IN_PROGRESS, now);
+    uint32 const start = now;
+    EXPECT_EQ(live, start);
+    EXPECT_TRUE(HoldsStepClock(live, now));
+    live = NextLiveStamp(live, B::STATE_IN_PROGRESS, now = start + B::VAULT_ATTEMPT_LIVE_CAP_MS - 1);
+    EXPECT_TRUE(HoldsStepClock(live, now));
+    live = NextLiveStamp(live, B::STATE_IN_PROGRESS, now = start + B::VAULT_ATTEMPT_LIVE_CAP_MS);
+    EXPECT_EQ(live, start) << "the stamp is the attempt's start, never refreshed while it stays live";
+    EXPECT_FALSE(HoldsStepClock(live, now)) << "past the cap the event timeout runs again";
+
+    // The wipe settles (FAIL, then NOT_STARTED): cleared; the next attempt
+    // starts a new cap.
+    live = NextLiveStamp(live, 2, now += 1000);
+    EXPECT_EQ(live, start);
+    live = NextLiveStamp(live, B::STATE_NOT_STARTED, now += 1000);
+    EXPECT_EQ(live, 0u);
+    live = NextLiveStamp(live, B::STATE_IN_PROGRESS, now += 1000);
+    EXPECT_EQ(live, now);
+    EXPECT_TRUE(HoldsStepClock(live, now));
+    EXPECT_EQ(NextLiveStamp(live, B::STATE_DONE, now), 0u);
+
+    // A stuck attempt is bounded: the cap plus one between-attempts timeout.
+    EXPECT_LE(B::VAULT_ATTEMPT_LIVE_CAP_MS + B::VAULT_TIMEOUT_MS, 20u * 60u * 1000u);
+    EXPECT_GT(B::VAULT_ATTEMPT_LIVE_CAP_MS, 5u * 60u * 1000u) << "a real attempt must fit under the cap";
+}
+
+// R-2-B MN-3 / MN-4: a `.bot self` human's key is a human's (DC waits for
+// them), and a member off the leader's map is never read: they count by the
+// last on-map reading.
+TEST(DcBlackrockDepthsVaultTest, KeyHoldersAreClassifiedWithoutCrossMapReads)
+{
+    using DcBrdVault::ClassifyKeyHolder;
+    using DcBrdVault::KeyHolder;
+
+    // onMap, keyNow, lastSeenWithKey, alive, humanControlled
+    EXPECT_EQ(ClassifyKeyHolder(true, true, false, true, false), KeyHolder::Bot);
+    EXPECT_EQ(ClassifyKeyHolder(true, true, false, true, true), KeyHolder::Human)
+        << "a self-bot human (IsHumanControlled) is a human, not a bot key holder";
+    EXPECT_EQ(ClassifyKeyHolder(true, true, true, false, false), KeyHolder::Absent) << "dead on the map";
+    EXPECT_EQ(ClassifyKeyHolder(true, false, true, true, false), KeyHolder::None)
+        << "an on-map reading overrides the cache";
+    // Off the map: only the cached reading counts; keyNow is never read there.
+    EXPECT_EQ(ClassifyKeyHolder(false, false, true, false, false), KeyHolder::Absent);
+    EXPECT_EQ(ClassifyKeyHolder(false, false, false, false, false), KeyHolder::None);
+    EXPECT_EQ(ClassifyKeyHolder(false, false, true, false, true), KeyHolder::Absent);
 }
 
 // Blackrock Depths Shadowforge Lock (map 230 event 2): walk to the lever in the
@@ -639,6 +1067,7 @@ TEST(DungeonEventRegistryTest, BlackrockHurleyKegsEventShape)
     EXPECT_EQ(e->activation, EventActivation::Anchored);
     EXPECT_EQ(e->orderIndex, 11u);  // Hurley's own bit
     EXPECT_TRUE(e->required);
+    EXPECT_TRUE(e->persistent) << "the pre-wake gather needs the followers' scout-lag off";
 
     ASSERT_EQ(e->steps.size(), 2u);
     EXPECT_EQ(e->steps[0].kind, EventStepKind::MoveTo);
@@ -669,49 +1098,42 @@ TEST(DungeonEventRegistryTest, BlackrockRibblyChallengeEventShape)
     EXPECT_TRUE(e->steps[0].skipIfMissing);
 }
 
-// Blackrock Depths Rocknot's Ale Run (map 230 event 5): buy the ale from Plugger
-// (hook 54), hand it to Rocknot (hook 47), back off his walk, latch the Bar Door
-// reaching state 2 and then Phalanx turning hostile at it (hook 55). NOT an
-// instance-data garrison: TYPE_BAR reads SPECIAL (4) for the whole escort, which
-// already satisfies a `>= DONE (3)` gate.
-TEST(DungeonEventRegistryTest, BlackrockRocknotAleRunEventShape)
+// Blackrock Depths Phalanx's Challenge (map 230 event 5): the reworked Phalanx's
+// gossip (menu 2283 option 0) wakes him, and the one Custom step (hook 55) both
+// takes the challenge and latches only once he is hostile at the Bar Door — never
+// on the click, or the roster's Phalanx row would chase a friendly golem. It
+// replaces Rocknot's ale run, whose two hooks (47 buy, 54 hand-in) are retired.
+TEST(DungeonEventRegistryTest, BlackrockPhalanxChallengeEventShape)
 {
     namespace B = DcBlackrockDepths;
-    DungeonEvent const* e = DungeonEventRegistry::Find(B::MAP_ID, B::EVENT_ROCKNOT);
+    DungeonEvent const* e = DungeonEventRegistry::Find(B::MAP_ID, B::EVENT_PHALANX_CHALLENGE);
     ASSERT_NE(e, nullptr);
     EXPECT_EQ(e->activation, EventActivation::Anchored);
     EXPECT_EQ(e->orderIndex, 13u);  // Phalanx's reordered slot
-    EXPECT_TRUE(e->persistent) << "the buy and the hand-in walk the tank off the anchor";
+    EXPECT_TRUE(e->persistent) << "a bar fight during his walk must not rewind it";
     EXPECT_TRUE(e->required);
 
-    ASSERT_EQ(e->steps.size(), 6u);
-    EXPECT_EQ(e->steps[0].kind, EventStepKind::MoveTo);
-    EXPECT_FLOAT_EQ(e->steps[0].x, B::ROCKNOT_HOLD_X);
-    EXPECT_FLOAT_EQ(e->steps[0].y, B::ROCKNOT_HOLD_Y);
-    EXPECT_EQ(e->steps[1].kind, EventStepKind::Custom);
-    EXPECT_EQ(e->steps[1].hookId, B::HOOK_BUY_ROCKNOT_ALE);
-    EXPECT_EQ(e->steps[2].kind, EventStepKind::Custom);
-    EXPECT_EQ(e->steps[2].hookId, B::HOOK_START_ROCKNOT_ALE_RUN);
-    EXPECT_EQ(e->steps[3].kind, EventStepKind::MoveTo);
-    EXPECT_FLOAT_EQ(e->steps[3].x, B::ROCKNOT_HOLD_X);
-    EXPECT_FLOAT_EQ(e->steps[3].y, B::ROCKNOT_HOLD_Y);
-    EXPECT_EQ(e->steps[4].kind, EventStepKind::WaitForGameObjectState);
-    EXPECT_EQ(e->steps[4].goEntry, B::GO_BAR_DOOR);
-    EXPECT_EQ(e->steps[4].wantState, 2u);  // GO_STATE_ACTIVE_ALTERNATIVE, as npc_rocknot sets it
-    EXPECT_GE(e->steps[4].timeoutMs, 60000u) << "the escort alone is ~40s";
-    EXPECT_EQ(e->steps[5].kind, EventStepKind::Custom);
-    EXPECT_EQ(e->steps[5].hookId, B::HOOK_PHALANX_AT_DOOR)
-        << "the door breaks 7s before Phalanx even starts his run to it";
-    EXPECT_GE(e->steps[5].timeoutMs, 22000u) << "7s cork delay + his 15s run cap";
+    ASSERT_EQ(e->steps.size(), 1u);
+    EXPECT_EQ(e->steps[0].kind, EventStepKind::Custom);
+    EXPECT_EQ(e->steps[0].hookId, B::HOOK_CHALLENGE_PHALANX);
+    EXPECT_GE(e->steps[0].timeoutMs, 30000u) << "his walk to the door has a 15s watchdog of its own";
+    EXPECT_TRUE(ObjectiveHookRegistry::Has(B::HOOK_CHALLENGE_PHALANX));
+    EXPECT_FALSE(ObjectiveHookRegistry::Has(47)) << "Rocknot's ale hand-in is retired";
+    EXPECT_FALSE(ObjectiveHookRegistry::Has(54)) << "Plugger's ale purchase is retired";
     for (EventStep const& st : e->steps)
-        EXPECT_NE(st.instanceDataId, static_cast<int32>(B::TYPE_BAR))
-            << "TYPE_BAR is SPECIAL (>= DONE) for the whole escort";
+        EXPECT_NE(st.kind, EventStepKind::WaitForGameObjectState)
+            << "the Bar Door opens on his DEATH now; nothing waits on it before the fight";
+
+    // The objective that carries it stands in his corner, and his door spot is
+    // a short walk away (the hook waits there for the turn).
+    EXPECT_LT(std::hypot(B::PHALANX_SPAWN_X - B::PHALANX_DOOR_X, B::PHALANX_SPAWN_Y - B::PHALANX_DOOR_Y), 25.0f);
 }
 
 // Blackrock Depths Tomb of the Seven (map 230 event 6): garrison Doom'rel's tier,
 // muster everyone inside (the gossip seals both doors), take his challenge, then
 // hold until TYPE_TOMB_OF_SEVEN is DONE. The hold carries the reset watch, whose
-// Restart rewinds the event to re-muster and re-challenge after the 15s reset.
+// Restart rewinds the event to re-muster and re-challenge after a wipe (once
+// every ghost is home: the reworked Doom'rel refuses the challenge before).
 TEST(DungeonEventRegistryTest, BlackrockTombOfSevenEventShape)
 {
     namespace B = DcBlackrockDepths;
@@ -736,7 +1158,7 @@ TEST(DungeonEventRegistryTest, BlackrockTombOfSevenEventShape)
     EXPECT_EQ(e->steps[3].hookId, B::HOOK_TOMB_RESET_WATCH);
     EXPECT_FLOAT_EQ(e->steps[3].radius, e->steps[0].radius)
         << "walk-in and hold must agree on where the garrison is";
-    EXPECT_GE(e->steps[3].timeoutMs, 7u * 30000u) << "seven ghosts wake 30s apart";
+    EXPECT_GE(e->steps[3].timeoutMs, 7u * 30000u) << "the fight, a wipe and the walk home";
     EXPECT_TRUE(ObjectiveHookRegistry::Has(B::HOOK_TOMB_MUSTER));
     EXPECT_TRUE(ObjectiveHookRegistry::Has(B::HOOK_TOMB_RESET_WATCH));
 }

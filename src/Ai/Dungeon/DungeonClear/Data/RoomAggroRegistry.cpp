@@ -49,15 +49,16 @@ namespace
         // flickering on 18309/18311/18313, far=108+, never 0).
         { 557, 18341, 70.0f, { 18309, 18311, 18313 }, true, -145.0f, -50.0f },
         { 601, 28684,  40.0f, {} }, // Azjol-Nerub — Krik'thir the Gatewatcher
-        // Blackrock Depths — Emperor Dagran Thaurissan. CallForHelp(VISIBLE_RANGE)
-        // wakes the whole throne room, the two balconies included, so their packs
-        // count however long the ramp walk is (see RoomAggroBoss::detourReachable).
-        // The throne-side floor goes last (bossSideLastRadius): 36yd takes in the
-        // flanking packs (<= 29.9yd from him) and stops short of the balconies'
-        // nearest mob (39.6yd).
-        { 230, 9019, 166.0f, {}, false, 0.0f, 0.0f, /*pullOutRadius*/ 0.0f,
-          /*skirtRadius*/ 0.0f, /*hasCampBox*/ false, 0.0f, 0.0f, 0.0f, 0.0f,
-          /*detourReachable*/ true, /*bossSideLastRadius*/ 36.0f },
+        // Blackrock Depths — Emperor Dagran Thaurissan. NOT a script radius any
+        // more: the stock CallForHelp(VISIBLE_RANGE), which woke the whole throne
+        // room and both balconies, is gone with the rework — his pull is Dagran
+        // and Moira, and his Imperial Guards march in from the wings. What is
+        // left is the Drakkisath shape: the floor packs flanking the throne
+        // (18.5-29.9yd from him: three Ambassadors, four Senators, the planted
+        // Dragoon) stand where his fight is held, and a fight among them pulls
+        // them in. 36yd takes them all and stops short of the balconies' nearest
+        // mob (39.6yd, 7yd up), which no longer answer him.
+        { 230, 9019,  36.0f, {} }, // Blackrock Depths — Emperor Dagran Thaurissan
         { 429, 14354,  50.0f, {} }, // Dire Maul East — Pusillin
 
         // Upper Blackrock Spire (229) — General Drakkisath. NOT a script radius:

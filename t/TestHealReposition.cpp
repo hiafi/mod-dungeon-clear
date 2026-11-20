@@ -8,6 +8,7 @@
 #include <cmath>
 
 #include "DungeonClearMath.h"
+#include "Ai/Dungeon/DungeonClear/Util/DcBossStandDown.h"
 
 using DungeonClearMath::HealCandidate;
 using DungeonClearMath::HealTargetNone;
@@ -232,4 +233,78 @@ TEST(DungeonClearHealRepositionTest, LeashKeepsHealerOffTheBanquetFloor)
 TEST(DungeonClearHealRepositionTest, ZeroRadiusIsUnleashed)
 {
     EXPECT_TRUE(HealLeashRegistry::WithinLeash(0.0f, 0.0f, 0.0f, 500.0f, 500.0f));
+}
+
+// ---- The fallback ladder (BRD Phalanx, PHALANX-DIAG) ------------------------
+
+using DungeonClearMath::ChooseHealRepositionMove;
+using DungeonClearMath::HealRepositionMove;
+
+// A sampled standoff always wins, leash or not (FindStandoffPoint applied it).
+TEST(DungeonClearHealRepositionTest, LadderStandoffFirst)
+{
+    EXPECT_EQ(ChooseHealRepositionMove(true, true, false, true, true), HealRepositionMove::Standoff);
+    EXPECT_EQ(ChooseHealRepositionMove(true, false, true, false, false), HealRepositionMove::Standoff);
+}
+
+// No standoff: the pathed close, inside the leash or with none, for any target.
+TEST(DungeonClearHealRepositionTest, LadderPathedClose)
+{
+    EXPECT_EQ(ChooseHealRepositionMove(false, true, false, true, true), HealRepositionMove::PathedClose);
+    EXPECT_EQ(ChooseHealRepositionMove(false, true, true, true, false), HealRepositionMove::PathedClose);
+}
+
+// A close past the camp leash still holds (the Banquet Hall walk).
+TEST(DungeonClearHealRepositionTest, LadderCloseOutsideLeashHolds)
+{
+    EXPECT_EQ(ChooseHealRepositionMove(false, true, true, false, true), HealRepositionMove::Hold);
+}
+
+// Neither: the tank's breadcrumbs, not a hold (the Phalanx healer held 133 times
+// off the bar floor while the tank died) -- unless leashed to a camp.
+TEST(DungeonClearHealRepositionTest, LadderNoRouteTrailsTheTank)
+{
+    EXPECT_EQ(ChooseHealRepositionMove(false, false, false, false, true), HealRepositionMove::Trail);
+    EXPECT_EQ(ChooseHealRepositionMove(false, false, true, false, true), HealRepositionMove::Hold);
+}
+
+// The trail leads to the tank only: an unreachable DPS keeps the old hold.
+TEST(DungeonClearHealRepositionTest, LadderTrailOnlyForTheTank)
+{
+    EXPECT_EQ(ChooseHealRepositionMove(false, false, false, false, false), HealRepositionMove::Hold);
+}
+
+using DungeonClearMath::HealTrailWindowEnd;
+
+// The glide stops at the first window point she can heal from (index 0 is her
+// own live position, never a stop), else rides the whole window.
+TEST(DungeonClearHealRepositionTest, TrailWindowStopsAtFirstHealableCrumb)
+{
+    std::vector<bool> const healable = { true, false, false, true, true, false };
+    EXPECT_EQ(HealTrailWindowEnd(healable.size(), [&](std::size_t i) { return bool(healable[i]); }), 4u);
+    EXPECT_EQ(HealTrailWindowEnd(5, [](std::size_t) { return false; }), 5u);
+    EXPECT_EQ(HealTrailWindowEnd(2, [](std::size_t i) { return i == 1; }), 2u);
+    EXPECT_EQ(HealTrailWindowEnd(3, [](std::size_t) { return true; }), 2u);
+}
+
+// ---- The stuck-combat breaker's five-man boss gate ---------------------------
+
+using DcBossStandDown::HoldsFiveManBossFight;
+
+// A live boss fighting another member holds the fight: the breaker stands down.
+TEST(DungeonClearFiveManBossFightTest, BossFightingAnotherMemberHolds)
+{
+    EXPECT_TRUE(HoldsFiveManBossFight(true, true, true, false, true));
+}
+
+// Anything less is not a boss fight for the gate: a trash holder, a dead or idle
+// boss, an evading one, or a boss whose victim is the asking bot itself (the
+// phantom shape the breaker exists for) or nobody in the party.
+TEST(DungeonClearFiveManBossFightTest, EveryOtherShapeLetsTheBreakerRun)
+{
+    EXPECT_FALSE(HoldsFiveManBossFight(false, true, true, false, true));
+    EXPECT_FALSE(HoldsFiveManBossFight(true, false, true, false, true));
+    EXPECT_FALSE(HoldsFiveManBossFight(true, true, false, false, true));
+    EXPECT_FALSE(HoldsFiveManBossFight(true, true, true, true, true));
+    EXPECT_FALSE(HoldsFiveManBossFight(true, true, true, false, false));
 }

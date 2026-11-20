@@ -135,6 +135,11 @@ struct DcApproachState
     uint32 lastObjectiveDiagMs = 0;  // at-objective "near but not arrived" diag throttle (getMSTime)
     uint32 lastTargetEntry     = 0;  // committed boss entry the approach is for
     uint32 lootYieldStartMs    = 0;  // loot-yield commit anchor (getMSTime)
+    // The heal reposition's breadcrumb glide is in flight (healer only). The heal
+    // trigger stops it the tick the heal target is healable again, so the healer
+    // never rides it on past range into the boss's melee (DungeonClearHealReposition
+    // Trigger, TrailTankForHeal).
+    bool healTrailGlide        = false;
 
     // --- room-aggro skirt orbit latch -------------------------------------
     // When the room-clear must reach a trash pack on the far side of a boss's

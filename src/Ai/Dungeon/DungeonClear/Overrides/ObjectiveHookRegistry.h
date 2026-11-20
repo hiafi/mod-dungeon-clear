@@ -100,10 +100,11 @@ inline constexpr uint32 DC_HOOK_RAID_MUSTER = 40;
 // The Black Morass (map 269) — the wave driver. See BlackMorassDriver.cpp.
 void RegisterBlackMorassHooks(ObjectiveHookRegistry::HookTable& out);
 
-// Blackrock Depths (map 230) — the Upper City set pieces: Rocknot's ale run,
-// Hurley's kegs, the Tomb of the Seven and the Lyceum braziers (ids 47-53). They
-// live beside the events in BlackrockDepthsEvents.cpp, which owns the geometry
-// and the instance-data constants they read.
+// Blackrock Depths (map 230) — the set pieces: the Ring of Law (1), the Lyceum
+// braziers (48-50), the Tomb of the Seven (51, 53), Hurley's kegs (52),
+// Phalanx's challenge (55) and the Vault (66); 47 and 54 (Rocknot's ale run) are
+// retired. They live beside the events in BlackrockDepthsEvents.cpp, which owns
+// the geometry and the instance-data constants they read.
 void RegisterBlackrockDepthsHooks(ObjectiveHookRegistry::HookTable& out);
 
 // Upper Blackrock Spire (map 229) — the Dragonspine Door, the hall runes, the

@@ -114,13 +114,15 @@ namespace
         // door and the ramp holds him and the reflections and no other spawn, so
         // there is nothing in it an advanced pull would legitimately want to drag.
         { 668, 5388.92f, 5438.92f, 2091.50f, 2141.50f },
-        // Blackrock Depths — the Iron Hall. Magmus (9938) spawns in the one
-        // fire-free gap among six Ironhand Guardians whose 30yd Gout of Flame
-        // circles cover the hall wall to wall at three bands (see the map-230
-        // DcHazardRegistry rows). A pull that dragged him to a camp would drag
-        // the fight into a circle; fought where he stands, the melee stack on him
-        // and ranged hold the same gap. The hall holds nothing else to pull. The
-        // box is the hall between the Golem doors and the throne door.
+        // Blackrock Depths — the Iron Hall. Magmus (9938) is fought where he
+        // stands. The stock reason was the Ironhand Guardians' Gout of Flame
+        // circles, wall to wall at three bands with his spawn in the one gap;
+        // the rework retired them, and his Crossfire lanes and Flame Wall
+        // strips (boss-mechanics registry shapes, at his y and down one side)
+        // are walked out of where they land, which a camp pull would only
+        // shift. The reworked fight's own leash is the hall, and the hall
+        // holds nothing else to pull. The box is the hall between the Golem
+        // doors and the throne door.
         { 230, 1340.0f, 1420.0f, -705.0f, -562.0f },
     };
 }

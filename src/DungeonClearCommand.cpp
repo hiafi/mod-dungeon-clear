@@ -376,8 +376,8 @@ public:
         return root;
     }
 
-    // `.dc on [wing]` — the optional wing (lbrs / ubrs, brd-db / brd-uc) picks the
-    // half of a map whose wings are chosen per run (Blackrock Spire/Depths).
+    // `.dc on [wing]` — the optional wing (lbrs / ubrs, brd-s1 .. brd-s4) picks
+    // the part of a map whose wings are chosen per run (Blackrock Spire/Depths).
     // `.dc wing [wing]` shows or changes it without toggling the run.
     static bool HandleOn(ChatHandler* handler, Optional<std::string> wing) { return RunDcCommand(handler, "dc on", wing ? *wing : ""); }
     static bool HandleOff(ChatHandler* handler)    { return RunDcCommand(handler, "dc off"); }

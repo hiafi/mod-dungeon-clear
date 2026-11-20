@@ -47,7 +47,6 @@ enum class DcThrottle : uint8
     DtkCampIssue,        // the Drak'Tharon camp-return point move (time only)
     HosTravelIssue,      // HosTravelTo — the Halls of Stone Tribunal arena
     HorStayAheadIssue,   // the HoR escape's per-follower forward step
-    IronHallHopIssue,    // the BRD Iron Hall's hop to a fire-free stop
     LyceumCloseUpIssue,  // the BRD Lyceum close-up walk back to the tank
     TocMoveIssue,        // the ToC driver's point move (the horse, or the tank on foot)
     OcMoveIssue,         // the Oculus rider's drake move (the vehicle base) and its giver walk
@@ -93,7 +92,7 @@ enum class DcThrottle : uint8
     ChessLog,            // the Karazhan chess conductor's DC_CHESS state line
     ChessGossip,         // a chess member's piece gossip (one per 3s)
     ChessSeatTeleport,   // a chess controller's hop to its sideline seat
-    BrdEventLog,         // the Blackrock Depths Upper City hooks' waiting lines
+    BrdEventLog,         // the Blackrock Depths hooks' waiting lines
     BrdTorchWarn,        // "no Flame Keeper respawned" WARN (once per torch wait)
     EventLeashLog,       // an event's pack-leash hold line (DungeonEvent::packLeash)
     UbrsEventLog,        // the Upper Blackrock Spire hooks' waiting lines
@@ -107,8 +106,11 @@ enum class DcThrottle : uint8
     BrdKegUse,           // floor between two Thunderbrew Lager Keg uses: all three
                          // are needed to wake Hurley, one per tick-floor so each
                          // keg's SmartAI chain lands before the next
-    BrdAleTurnIn,        // floor between two Rocknot's Ale hand-ins, so each lands
-                         // as its own drink and yell instead of three in one tick
+    BrdVaultCofferUse,   // floor between two Dark Coffer uses (the reworked Vault's
+                         // trigger): one gossip, then let the instance answer
+    BrdVaultKeyNudge,    // floor on walking a key-holding follower to the coffer
+    BrdHurleyGatherNudge, // floor on walking the stragglers to the tank before
+                          // Hurley's first keg (DcBrdHurleyWakeDecision.h)
     UbrsDoorArm,         // floor between two armings of the Dragonspire Hall (AT
                          // 2046's script + IP's door SetData): once per door attempt
     UbrsDoorClick,       // floor between two Dragonspine Door click fallbacks; its

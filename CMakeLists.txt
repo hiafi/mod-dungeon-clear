@@ -1051,3 +1051,8 @@ AC_ADD_CONFIG_FILE("${CMAKE_CURRENT_LIST_DIR}/conf/mod_dungeon_clear.conf.dist")
 #    dropped them: Zul'Gurub's High Priestess Arlokk, summoned by the Gong of
 #    Bethekk, and Temple of Ahn'Qiraj's Ouro, summoned when a player reaches his
 #    mound. Each gets a boss anchor on its trigger plus a repeatable event.)
+
+# Files removed: Action/DcIronHallSafeSpotAction.cpp, Util/DcIronHallDecision.h
+#   (Blackrock Depths' Iron Hall safe-spot hop, built on the stock Ironhand
+#    Guardians' Gout of Flame rings, which the Blackrock Depths rework retired.
+#    Editing this file forces the re-glob that drops them from the build.)
