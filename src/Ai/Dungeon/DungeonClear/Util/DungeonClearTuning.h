@@ -48,6 +48,18 @@ constexpr float DC_PI = 3.14159265358979323846f;
 // hand-off, so they must agree.
 constexpr float DC_ENGAGE_RANGE = 22.0f;
 
+// Pre-boss regroup (DungeonClearAtBossTrigger, dungeons only; raids have the
+// muster). Before the tank engages a boss that is not fighting yet, every bot
+// must stand within DC_BOSS_REGROUP_RANGE of it and every bot healer must also
+// have LOS to it. The followers close in while it holds (the scout-lag and the
+// camp hold stand down), so the range only needs to cover the trail-follow
+// stagger (up to ~10.5yd plus 4yd arrival slack). Bounded by the same 20s as the
+// sealed-encounter muster; the latch goes stale after DC_BOSS_REGROUP_STALE_MS
+// without a tick at the boss, which is also the followers' cut-off.
+constexpr float DC_BOSS_REGROUP_RANGE = 20.0f;
+constexpr uint32 DC_BOSS_REGROUP_TIMEOUT_MS = 20000;
+constexpr uint32 DC_BOSS_REGROUP_STALE_MS = 2000;
+
 // How many consecutive engage-trash ticks may hand a far, long-route pack to Advance
 // WITHOUT the gap closing before this action takes the tick back and walks in itself.
 // The hand-off is only sound while Advance is travelling toward the pack; for one

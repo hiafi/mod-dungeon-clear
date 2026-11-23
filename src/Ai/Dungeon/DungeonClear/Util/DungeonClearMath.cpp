@@ -368,6 +368,43 @@ bool DungeonClearMath::ShouldMusterForScriptedStage(bool stagePending, bool topp
     return elapsed < waitMs;
 }
 
+bool DungeonClearMath::ShouldHoldBossRegroup(bool bossInCombat, bool regrouped,
+                                             std::uint32_t entry, std::uint32_t now,
+                                             std::uint32_t budgetMs, std::uint32_t staleMs,
+                                             BossRegroupLatch& latch)
+{
+    // A different boss, or nobody asked for a while: a fresh attempt.
+    bool const stale = latch.lastMs == 0 || now < latch.lastMs || now - latch.lastMs > staleMs;
+    if (latch.entry != entry || stale)
+        latch = BossRegroupLatch{entry, 0u, 0u, false};
+    latch.lastMs = now != 0 ? now : 1u;
+
+    if (latch.released)
+        return false;
+    if (bossInCombat || regrouped || budgetMs == 0)
+    {
+        latch.released = true;
+        return false;
+    }
+    if (latch.sinceMs == 0)
+        latch.sinceMs = latch.lastMs;
+    std::uint32_t const elapsed = now >= latch.sinceMs ? now - latch.sinceMs : 0u;
+    if (elapsed >= budgetMs)
+    {
+        latch.released = true;
+        return false;
+    }
+    return true;
+}
+
+bool DungeonClearMath::IsBossRegroupActive(BossRegroupLatch const& latch, std::uint32_t now,
+                                            std::uint32_t staleMs)
+{
+    if (latch.entry == 0 || latch.lastMs == 0)
+        return false;
+    return now >= latch.lastMs && now - latch.lastMs <= staleMs;
+}
+
 bool DungeonClearMath::ShouldPlantEarly(std::vector<float> const& attackerDists,
                                         float glueRadius,
                                         std::uint32_t glueTicksNeeded, bool losPull,

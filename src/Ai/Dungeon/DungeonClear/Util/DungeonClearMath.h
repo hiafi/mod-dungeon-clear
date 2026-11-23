@@ -551,6 +551,42 @@ namespace DungeonClearMath
                                       std::uint32_t waitMs, std::uint32_t minMs,
                                       std::uint32_t& waitSinceOut);
 
+    // Pre-boss REGROUP latch, kept on the leader's DcRunState. One per run; it
+    // follows the boss being engaged (`entry`) and goes stale on its own when
+    // nobody has asked for `staleMs` (the tank left the boss, the run wiped), so
+    // the next attempt at any boss starts a fresh budget without a reset site.
+    struct BossRegroupLatch
+    {
+        std::uint32_t entry = 0;
+        std::uint32_t sinceMs = 0;   // 0 = not holding yet
+        std::uint32_t lastMs = 0;    // last tick the gate was asked (0 = never)
+        bool released = false;       // regrouped, timed out or boss already fighting
+    };
+
+    // Pre-boss regroup gate (pure). The at-boss engage in a dungeon used to check
+    // only the between-pulls spread (PartyMaxSpread from the tank) and the rest
+    // floors, while dynamic pull mode parks the party PullDynamicPartyLag behind
+    // the tank. So the engage walked in with the healer ~25yd back and often
+    // around a corner (tr-20261123-214436-1: Loksey pulled with the healer 43.7yd
+    // from him, behind the alcove's neck, no LOS; the tank died unhealed).
+    //
+    // Returns true to HOLD the engage. `regrouped` is the caller's party read
+    // (every bot within range of the tank, every healer also in LOS). Release is
+    // latched for the rest of the attempt, so the tank's own walk-in (which opens
+    // the gap again) never stutters the pull. `bossInCombat` releases at once:
+    // a boss already fighting is joined, never waited on. Bounded by `budgetMs`
+    // (0 = gate disabled), so a member who cannot come in never stalls the run.
+    bool ShouldHoldBossRegroup(bool bossInCombat, bool regrouped, std::uint32_t entry,
+                               std::uint32_t now, std::uint32_t budgetMs,
+                               std::uint32_t staleMs, BossRegroupLatch& latch);
+
+    // Follower-side read of the leader's latch: true while the tank stands at the
+    // boss being asked (the gate ran within `staleMs`), holding or already released.
+    // Followers use it to stop lagging (scout-lag, camp hold) and stay on the tank,
+    // so the gate can be met and the party walks in with the tank, not 15yd behind.
+    bool IsBossRegroupActive(BossRegroupLatch const& latch, std::uint32_t now,
+                              std::uint32_t staleMs);
+
     // Turn-and-plant gate (pure). A human tank dragging a pack back to camp turns
     // and fights the moment the pack is glued to it, rather than sprinting the
     // whole leg back-turned (the single biggest visual bot-tell, and why the

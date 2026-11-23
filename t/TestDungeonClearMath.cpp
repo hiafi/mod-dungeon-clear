@@ -3741,3 +3741,64 @@ TEST(DungeonClearMathTest, PartyHolderScanCapAndFullScan)
     raid[20] = true;                     // one member past the cap is held
     EXPECT_TRUE(DungeonClearMath::ScanPartyForHolder(raid, held, 0));
 }
+
+// Pre-boss regroup (F-4c): the dungeon boss engage holds until the party is near
+// the tank and the healer sees it, unless the boss already fights. Released once
+// per attempt (the walk-in reopens the gap and must not stutter), bounded by the
+// budget, fresh per boss and after the latch goes stale. Loksey, tr-20261123-214436-1.
+TEST(DungeonClearMathTest, BossRegroupHoldsUntilSetThenStaysReleased)
+{
+    using DungeonClearMath::BossRegroupLatch;
+    using DungeonClearMath::IsBossRegroupActive;
+    using DungeonClearMath::ShouldHoldBossRegroup;
+    std::uint32_t const budget = 20000, stale = 2000, loksey = 3974, kell = 300910;
+
+    BossRegroupLatch latch;
+    EXPECT_FALSE(IsBossRegroupActive(latch, 1000, stale));   // never asked
+
+    // Healer back and out of sight: hold, and the followers are told to close in.
+    EXPECT_TRUE(ShouldHoldBossRegroup(false, false, loksey, 1000, budget, stale, latch));
+    EXPECT_TRUE(ShouldHoldBossRegroup(false, false, loksey, 1500, budget, stale, latch));
+    EXPECT_TRUE(IsBossRegroupActive(latch, 1600, stale));
+    // Set: release, and the release sticks while the tank walks in and the gap opens.
+    EXPECT_FALSE(ShouldHoldBossRegroup(false, true, loksey, 3000, budget, stale, latch));
+    EXPECT_FALSE(ShouldHoldBossRegroup(false, false, loksey, 3200, budget, stale, latch));
+    EXPECT_TRUE(IsBossRegroupActive(latch, 3300, stale));    // party stays on the tank
+    // The tank left the boss (wipe, run moved on): stale for followers, fresh for the gate.
+    EXPECT_FALSE(IsBossRegroupActive(latch, 3200 + stale + 1, stale));
+    EXPECT_TRUE(ShouldHoldBossRegroup(false, false, loksey, 3200 + stale + 1, budget, stale, latch));
+
+    // A different boss is a fresh attempt.
+    BossRegroupLatch next;
+    EXPECT_FALSE(ShouldHoldBossRegroup(false, true, loksey, 5000, budget, stale, next));
+    EXPECT_TRUE(ShouldHoldBossRegroup(false, false, kell, 5100, budget, stale, next));
+}
+
+TEST(DungeonClearMathTest, BossRegroupNeverWaitsOnAFightingBossAndIsBounded)
+{
+    using DungeonClearMath::BossRegroupLatch;
+    using DungeonClearMath::ShouldHoldBossRegroup;
+    std::uint32_t const budget = 20000, stale = 2000, boss = 3974;
+
+    // Already in combat: join at once, never hold.
+    BossRegroupLatch fighting;
+    EXPECT_FALSE(ShouldHoldBossRegroup(true, false, boss, 1000, budget, stale, fighting));
+    EXPECT_FALSE(ShouldHoldBossRegroup(false, false, boss, 1200, budget, stale, fighting));
+
+    // A straggler who never comes in: held for the budget, then engaged anyway.
+    BossRegroupLatch stuck;
+    std::uint32_t t = 1000;
+    for (; t < 1000 + budget; t += 500)
+        EXPECT_TRUE(ShouldHoldBossRegroup(false, false, boss, t, budget, stale, stuck)) << t;
+    EXPECT_FALSE(ShouldHoldBossRegroup(false, false, boss, t, budget, stale, stuck));
+    EXPECT_FALSE(ShouldHoldBossRegroup(false, false, boss, t + 500, budget, stale, stuck));
+
+    // Budget 0 = gate off; now == 0 still latches (0 means "never asked").
+    BossRegroupLatch off;
+    EXPECT_FALSE(ShouldHoldBossRegroup(false, false, boss, 1000, 0, stale, off));
+    BossRegroupLatch zero;
+    EXPECT_TRUE(ShouldHoldBossRegroup(false, false, boss, 0, budget, stale, zero));
+    for (t = 500; t < 1 + budget; t += 500)
+        EXPECT_TRUE(ShouldHoldBossRegroup(false, false, boss, t, budget, stale, zero)) << t;
+    EXPECT_FALSE(ShouldHoldBossRegroup(false, false, boss, 1 + budget, budget, stale, zero));
+}
