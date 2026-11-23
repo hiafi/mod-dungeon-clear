@@ -122,7 +122,12 @@ namespace DcCombatFlag
     // hostile AREA AURA holds the flag from 45yd with nothing on us, and no
     // radius a fight actually happens at will admit it.
     bool IsHeldByLiveEnemy(Player* p, float radius);
+    // AnyPartyHeldByLiveEnemy caps its scan at 12 members and answers TRUE past
+    // the cap ("do not act yet"). AnyPartyMemberHeldByLiveEnemy scans every
+    // member: for a caller that reads "held" as "keep waiting" on a raid (the
+    // run-end fight hold). Same answer for 12 members or fewer.
     bool AnyPartyHeldByLiveEnemy(Player* bot, float radius);
+    bool AnyPartyMemberHeldByLiveEnemy(Player* bot, float radius);
 
     // May a DC rung own this tick? True when not flagged at all, and true again
     // once the flag has had no engagement behind it continuously for

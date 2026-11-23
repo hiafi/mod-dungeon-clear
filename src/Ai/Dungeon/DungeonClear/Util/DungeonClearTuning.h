@@ -295,6 +295,13 @@ constexpr uint32 DC_REZ_RAID_PER_CORPSE_MS = 30000;
 // covering a camp fight the party is strung out across.
 constexpr float DC_FIGHT_HOLDER_RADIUS = 40.0f;
 
+// The run-end fight hold (DungeonClearMath::HoldRunEndForFight): after the last
+// boss, wait DC_FINAL_FIGHT_SETTLE_MS for units his death summons to engage, then
+// hold while the party is still fighting, up to DC_FINAL_FIGHT_CAP_MS (Herod's
+// trainees are 60 s summons; the cap leaves room for a slow kill).
+constexpr uint32 DC_FINAL_FIGHT_SETTLE_MS = 3000;
+constexpr uint32 DC_FINAL_FIGHT_CAP_MS = 120000;
+
 // How far from a member an attacker (or that member's own victim) may be and
 // still count as a FIGHT for DcCombatFlag::IsEngaged.
 //

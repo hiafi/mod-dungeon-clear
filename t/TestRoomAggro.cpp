@@ -7,6 +7,7 @@
 
 #include "gtest/gtest.h"
 #include "Ai/Dungeon/DungeonClear/Data/RoomAggroRegistry.h"
+#include "Ai/Dungeon/DungeonClear/Data/Events/DungeonEventTables.h"
 #include "Ai/Dungeon/DungeonClear/Util/DcEngageGeometry.h"
 
 // --- Find -----------------------------------------------------------------
@@ -63,11 +64,204 @@ TEST(RoomAggroRegistryTest, UnflaggedBossReturnsNull)
 
 TEST(RoomAggroRegistryTest, MultiWingMapIsKeyedByEntry)
 {
-    // SM Cathedral shares map 189 with other wings; only the cathedral bosses
-    // are flagged.
-    EXPECT_NE(RoomAggroRegistry::Find(189, 3976), nullptr);  // Mograine
-    EXPECT_NE(RoomAggroRegistry::Find(189, 3977), nullptr);  // Whitemane
-    EXPECT_EQ(RoomAggroRegistry::Find(189, 6487), nullptr);  // (some other 189 npc)
+    // SM's four wings share map 189; a row names its boss, not the map.
+    EXPECT_NE(RoomAggroRegistry::Find(189, 6489), nullptr);    // Ironspine (Graveyard)
+    EXPECT_NE(RoomAggroRegistry::Find(189, 300940), nullptr);  // Crell (Armory)
+    EXPECT_EQ(RoomAggroRegistry::Find(189, 6487), nullptr);    // Doan (sealed, no room)
+}
+
+// The rework's wave 1 rooms (DcScarletMonastery::*_ROOM_*). Distances are the
+// live-DB spawns (2026-11-20) measured from each boss's rework spot. The value
+// counts a unit as room trash when it is within the radius, inside the Y band
+// and outside the pull-out ring (the ring that comes with the boss); every row
+// with a pull-out radius also forces the advanced pull-to-camp.
+namespace
+{
+    // A unit `d` yd from the boss, as DungeonClearRoomTrashValue judges it.
+    bool ScarletKept(RoomAggroBoss const& row, float d, float y)
+    {
+        return RoomAggroRegistry::InRoomBand(row, y) &&
+               RoomAggroRegistry::IsRoomTrash(row, /*any hostile*/ 4540, d, row.pullOutRadius);
+    }
+}
+
+TEST(RoomAggroRegistryTest, ScarletIronspineClearsHisLawnButThePhantasm)
+{
+    namespace S = DcScarletMonastery;
+    RoomAggroBoss const* r = RoomAggroRegistry::Find(S::MAP_ID, S::NPC_IRONSPINE);
+    ASSERT_NE(r, nullptr);
+    EXPECT_FLOAT_EQ(r->radius, S::IRONSPINE_ROOM_RADIUS);
+    EXPECT_FLOAT_EQ(r->pullOutRadius, S::IRONSPINE_PULL_OUT_RADIUS);
+    EXPECT_FALSE(r->hasYBand);
+    // STAGE-D2: the Phantasm 39873 2.5yd off his home (wander 3) comes with him.
+    EXPECT_FALSE(ScarletKept(*r, 2.5f + 3.0f, 1283.1f));
+    // Everything else within 30yd dies first: the Unfettered Spirit packs
+    // 22.8-30yd (wander 3-5) and the Anguished Dead 39880 at 30.8yd.
+    for (float d : { 22.8f - 3.0f, 24.4f, 25.1f - 5.0f, 27.5f, 30.0f, 30.8f })
+        EXPECT_TRUE(ScarletKept(*r, d, 1300.0f)) << d;
+}
+
+TEST(RoomAggroRegistryTest, ScarletCouncilClearsItsLawnSpot)
+{
+    namespace S = DcScarletMonastery;
+    RoomAggroBoss const* r = RoomAggroRegistry::Find(S::MAP_ID, S::NPC_FALLEN_CHAMPION);
+    ASSERT_NE(r, nullptr);
+    EXPECT_FLOAT_EQ(r->radius, S::COUNCIL_ROOM_RADIUS);
+    EXPECT_FLOAT_EQ(r->pullOutRadius, S::COUNCIL_PULL_OUT_RADIUS);
+    // Azshir is the second council anchor and a roster boss, never a room-aggro
+    // boss of his own: one pre-clear per pull.
+    EXPECT_EQ(RoomAggroRegistry::Find(S::MAP_ID, S::NPC_AZSHIR), nullptr);
+    // The Anguished Dead 39899 14.6yd out comes with them; 39891 (18yd, wander 3),
+    // the Unfettered Spirits 24.2-29yd and the Anguished Dead 39900 (29.8yd) die
+    // first.
+    EXPECT_FALSE(ScarletKept(*r, 14.6f, 1362.8f));
+    for (float d : { 18.0f, 24.2f, 25.8f, 29.0f, 29.8f })
+        EXPECT_TRUE(ScarletKept(*r, d, 1340.0f)) << d;
+}
+
+TEST(RoomAggroRegistryTest, ScarletLokseyClearsTheKennelHall)
+{
+    namespace S = DcScarletMonastery;
+    RoomAggroBoss const* r = RoomAggroRegistry::Find(S::MAP_ID, S::NPC_LOKSEY);
+    ASSERT_NE(r, nullptr);
+    EXPECT_FLOAT_EQ(r->radius, S::LOKSEY_ROOM_RADIUS);
+    // The hall starts 35yd from his alcove: the computed sphere excludes only his
+    // own hounds, so no pull-out ring and no forced advanced pull.
+    EXPECT_FLOAT_EQ(r->pullOutRadius, 0.0f);
+    // The computed sphere at an even level: detection 20 + both reaches 1.5 +
+    // AggroRangeMargin 2 + RoomAggroPathPadding 3 (DcEngageGeometry::AggroReachYards).
+    float const sphere = 20.0f + 1.5f + 1.5f + 2.0f + 3.0f;
+    // The hall's packs (R-1-LIB m3): Gallant 40081 (34.9), Beastmaster 40078
+    // (47.4), the NE pack 40068 / 40058 / 40070 by the pups' entry (86-86.6), the
+    // SE Gallants 40075 / 40076 (87.4 / 90.5).
+    for (float d : { 34.9f, 47.4f, 62.8f, 69.3f, 80.7f, 86.6f, 87.4f, 90.5f })
+        EXPECT_TRUE(RoomAggroRegistry::IsRoomTrash(*r, 4288, d, sphere)) << d;
+    // Outside the hall: the Gallant 40061 north of the NE entry (98.5yd) and Kell's
+    // long hall (105yd and on).
+    EXPECT_FALSE(RoomAggroRegistry::IsRoomTrash(*r, 4287, 98.5f, sphere));
+    EXPECT_FALSE(RoomAggroRegistry::IsRoomTrash(*r, 4287, 105.0f, sphere));
+}
+
+TEST(RoomAggroRegistryTest, ScarletKellClearsTheCaseSpotsNotTheReadingHall)
+{
+    namespace S = DcScarletMonastery;
+    RoomAggroBoss const* r = RoomAggroRegistry::Find(S::MAP_ID, S::NPC_KELL);
+    ASSERT_NE(r, nullptr);
+    EXPECT_FLOAT_EQ(r->radius, S::KELL_ROOM_RADIUS);
+    EXPECT_FLOAT_EQ(r->pullOutRadius, S::KELL_PULL_OUT_RADIUS);
+    ASSERT_TRUE(r->hasYBand);
+    EXPECT_FLOAT_EQ(r->minY, S::KELL_ROOM_MIN_Y);
+    EXPECT_FLOAT_EQ(r->maxY, S::KELL_ROOM_MAX_Y);
+    // His three Diviners in the aisle (7.9 / 11.2 / 11.6yd) come with him.
+    EXPECT_FALSE(ScarletKept(*r, 7.9f, -335.2f));
+    EXPECT_FALSE(ScarletKept(*r, 11.6f, -332.6f));
+    // The case-spot trash dies first: the Monk 40084 1.4yd from the north skull
+    // case (27.9yd), the Diviner 40085 by the east skull case (23.5), the
+    // Gallant 40074 (23.8), the Chaplain 40055 (25.2), and the bay rows out to
+    // the Diviner 40056 (36.3yd, y -303).
+    EXPECT_TRUE(ScarletKept(*r, 27.9f, -312.4f));
+    EXPECT_TRUE(ScarletKept(*r, 23.5f, -336.3f));
+    EXPECT_TRUE(ScarletKept(*r, 23.8f, -310.1f));
+    EXPECT_TRUE(ScarletKept(*r, 25.2f, -304.4f));
+    EXPECT_TRUE(ScarletKept(*r, 36.3f, -303.0f));
+    // The reading hall's Monk 40094 (35.6yd, y -363.6) is Hollis Grey's room, and
+    // the Adepts beyond the north door (y -286) are nobody's.
+    EXPECT_FALSE(ScarletKept(*r, 35.6f, -363.6f));
+    EXPECT_FALSE(ScarletKept(*r, 36.0f, -286.0f));
+}
+
+TEST(RoomAggroRegistryTest, ScarletHollisGreyClearsTheReadingHall)
+{
+    namespace S = DcScarletMonastery;
+    RoomAggroBoss const* r = RoomAggroRegistry::Find(S::MAP_ID, S::NPC_HOLLIS_GREY);
+    ASSERT_NE(r, nullptr);
+    EXPECT_FLOAT_EQ(r->radius, S::HOLLIS_GREY_ROOM_RADIUS);
+    EXPECT_FLOAT_EQ(r->pullOutRadius, S::HOLLIS_GREY_PULL_OUT_RADIUS);
+    // STAGE-D7: the Diviner 40103 (8.7yd) and the Monk 40102 (11.5yd) come with him.
+    EXPECT_FALSE(ScarletKept(*r, 8.7f, -386.9f));
+    EXPECT_FALSE(ScarletKept(*r, 11.5f, -386.5f));
+    // The other ten die first, 14.4-31.7yd (the computed ~28yd sphere would have
+    // kept only the far four).
+    for (float d : { 14.4f, 15.8f, 20.0f, 20.1f, 22.2f, 25.7f, 27.8f, 29.8f, 30.8f, 31.7f })
+        EXPECT_TRUE(ScarletKept(*r, d, -390.0f)) << d;
+}
+
+TEST(RoomAggroRegistryTest, ScarletVishasThalnosAndDoanPullNoRoom)
+{
+    namespace S = DcScarletMonastery;
+    for (uint32 entry : { S::NPC_VISHAS, S::NPC_THALNOS, S::NPC_DOAN })
+        EXPECT_EQ(RoomAggroRegistry::Find(S::MAP_ID, entry), nullptr) << entry;
+}
+
+// Wave 2 (DC-2). Live-DB spawns 2026-11-20 measured from the rev spawns.
+TEST(RoomAggroRegistryTest, ScarletCrellClearsTheWholeStoreroom)
+{
+    namespace S = DcScarletMonastery;
+    RoomAggroBoss const* r = RoomAggroRegistry::Find(S::MAP_ID, S::NPC_CRELL);
+    ASSERT_NE(r, nullptr);
+    EXPECT_FLOAT_EQ(r->radius, S::CRELL_ROOM_RADIUS);
+    EXPECT_FLOAT_EQ(r->pullOutRadius, S::CRELL_PULL_OUT_RADIUS);
+    EXPECT_FALSE(r->hasYBand);
+    // STAGE-D9: clear the storeroom first. The Guardsman 40149 (10.4yd) and the
+    // Protector 89059 (11.0yd) by the anvil die first, and so does the patrol
+    // 40151 at its south end (18.3yd). At its north end, past the anvil (7.9yd),
+    // it is inside the ring for a moment and would come with him.
+    for (float d : { 10.4f, 11.0f, 18.3f, 21.0f, 21.2f, 25.4f, 28.2f, 28.9f, 29.7f, 31.9f, 32.5f, 33.4f,
+                     33.5f, 36.5f })
+        EXPECT_TRUE(ScarletKept(*r, d, -390.0f)) << d;
+    EXPECT_FALSE(ScarletKept(*r, 7.9f, -382.8f));
+    // R-2-FW MN-1: his detection range is 9 (crell.py CRELL_DETECTION_RANGE, F-2c). The pull-out ring stays inside
+    // it, so the two by the anvil are kept, and a non-zero ring forces the advanced pull: the tank tags them from
+    // outside his live aggro sphere and drags them to a camp, never fighting them beside him.
+    EXPECT_LE(S::CRELL_PULL_OUT_RADIUS, 9.0f);
+    EXPECT_GT(r->pullOutRadius, 0.0f);
+    // The Protector 89062 past the east strip's south end (43.3yd) is route trash.
+    EXPECT_FALSE(ScarletKept(*r, 43.3f, -427.4f));
+}
+
+TEST(RoomAggroRegistryTest, ScarletHaldenIsPulledAlone)
+{
+    namespace S = DcScarletMonastery;
+    RoomAggroBoss const* r = RoomAggroRegistry::Find(S::MAP_ID, S::NPC_HALDEN);
+    ASSERT_NE(r, nullptr);
+    EXPECT_FLOAT_EQ(r->radius, S::HALDEN_ROOM_RADIUS);
+    EXPECT_FLOAT_EQ(r->pullOutRadius, S::HALDEN_PULL_OUT_RADIUS);
+    // STAGE-D10: his five chamber soldiers (Protector 89075, Defenders 89074 /
+    // 89077 / 89076, Myrmidon 89078) and the six in the necks and side rooms die
+    // first. His detection range is 10: the pull-out ring stays inside it.
+    EXPECT_LT(S::HALDEN_PULL_OUT_RADIUS, 10.0f);
+    for (float d : { 11.3f, 11.4f, 12.9f, 17.5f, 17.9f, 19.6f, 25.5f, 26.2f, 27.3f, 27.6f, 27.7f })
+        EXPECT_TRUE(ScarletKept(*r, d, -400.0f)) << d;
+    // The far ends of the south band and the north room (29-35yd) are route trash.
+    EXPECT_FALSE(ScarletKept(*r, 29.0f, -378.8f));
+}
+
+TEST(RoomAggroRegistryTest, ScarletThorneClearsTheGarden)
+{
+    namespace S = DcScarletMonastery;
+    RoomAggroBoss const* r = RoomAggroRegistry::Find(S::MAP_ID, S::NPC_THORNE);
+    ASSERT_NE(r, nullptr);
+    EXPECT_FLOAT_EQ(r->radius, S::THORNE_ROOM_RADIUS);
+    EXPECT_FLOAT_EQ(r->pullOutRadius, S::THORNE_PULL_OUT_RADIUS);
+    // STAGE-D12: the Centurion 39958 (20.7yd, random movement 3) and the Defender
+    // 39962 (22.7yd) would drag him in; they die first even wandered 3yd closer.
+    EXPECT_TRUE(ScarletKept(*r, 20.7f - 3.0f, 1378.6f));
+    EXPECT_TRUE(ScarletKept(*r, 22.7f - 3.0f, 1421.9f));
+    // The rest of the garden: Centurion 39959 (27.8), the west entry's Myrmidons
+    // 39954 / 39965 (27.9 / 28.2) and Sorcerer 39951 (30.9), the Myrmidon 39948
+    // (35.6), the moved Centurion 39953 (39.0) and the Sorcerer 39966 (39.7).
+    for (float d : { 27.8f, 27.9f, 28.2f, 30.9f, 35.6f, 39.0f, 39.7f })
+        EXPECT_TRUE(ScarletKept(*r, d, 1400.0f)) << d;
+}
+
+TEST(RoomAggroRegistryTest, ScarletCathedralLostItsStockRoomPull)
+{
+    namespace S = DcScarletMonastery;
+    // The stock CATHEDRAL_PULL_RANGE rows are gone (D13: never pull Mograine; the
+    // nave is empty), and nothing stands within 37yd of Herod's pit.
+    EXPECT_EQ(RoomAggroRegistry::Find(S::MAP_ID, S::NPC_MOGRAINE), nullptr);
+    EXPECT_EQ(RoomAggroRegistry::Find(S::MAP_ID, S::NPC_WHITEMANE), nullptr);
+    EXPECT_EQ(RoomAggroRegistry::Find(S::MAP_ID, S::NPC_HEROD), nullptr);
 }
 
 // Scholomance has NO room-aggro row any more. The Marduk / Vectus students

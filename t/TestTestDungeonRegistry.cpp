@@ -211,6 +211,66 @@ TEST(DcTestDungeonRegistryTest, RetiredBrdTokensAliasToTheirSections)
     EXPECT_STREQ(row->token, "brd-s4");
 }
 
+TEST(DcTestDungeonRegistryTest, ScarletMonasterySectionAliasesNameTheWingRows)
+{
+    // The rework's Finder sections 1-4 (sm-s1..sm-s4) are the Graveyard, Library,
+    // Armory and Cathedral rows; the wing tokens stay (section 7 #12, BRD's alias
+    // precedent).
+    EXPECT_STREQ(DcTestDungeonRegistry::AliasTarget("sm-s1"), "sm-gy");
+    EXPECT_STREQ(DcTestDungeonRegistry::AliasTarget("sm-s2"), "sm-lib");
+    EXPECT_STREQ(DcTestDungeonRegistry::AliasTarget("sm-s3"), "sm-arm");
+    EXPECT_STREQ(DcTestDungeonRegistry::AliasTarget("sm-s4"), "sm-cath");
+    for (char const* token : { "sm-gy", "sm-lib", "sm-arm", "sm-cath" })
+        EXPECT_EQ(DcTestDungeonRegistry::AliasTarget(token), nullptr) << token;
+
+    Row const* gy = Find("sm-s1");
+    ASSERT_NE(gy, nullptr);
+    EXPECT_STREQ(gy->token, "sm-gy");
+    EXPECT_EQ(gy->mapId, 189u);
+    // The section start (areatrigger_teleport / lfg_dungeon_template 18) and the
+    // Graveyard's boss level.
+    EXPECT_NEAR(gy->x, 1688.99f, 0.01f);
+    EXPECT_NEAR(gy->y, 1053.48f, 0.01f);
+    EXPECT_EQ(gy->recommendedLevel, 32u);
+    EXPECT_EQ(gy->heroicLevel, 0u);
+
+    Row const* lib = Find("sm-s2");
+    ASSERT_NE(lib, nullptr);
+    EXPECT_STREQ(lib->token, "sm-lib");
+    EXPECT_NEAR(lib->x, 255.35f, 0.01f);
+    EXPECT_NEAR(lib->y, -209.09f, 0.01f);
+    EXPECT_EQ(lib->recommendedLevel, 35u);
+    EXPECT_EQ(lib->heroicLevel, 0u);
+
+    // Sections 3 and 4: the Finder starts (lfg_dungeon_template 163 / 164) and
+    // the hub's boss levels (Armory 37, Cathedral 40).
+    Row const* arm = Find("sm-s3");
+    ASSERT_NE(arm, nullptr);
+    EXPECT_STREQ(arm->token, "sm-arm");
+    EXPECT_NEAR(arm->x, 1610.83f, 0.01f);
+    EXPECT_NEAR(arm->y, -323.43f, 0.01f);
+    EXPECT_EQ(arm->recommendedLevel, 37u);
+    EXPECT_EQ(arm->heroicLevel, 0u);
+
+    Row const* cath = Find("sm-s4");
+    ASSERT_NE(cath, nullptr);
+    EXPECT_STREQ(cath->token, "sm-cath");
+    EXPECT_NEAR(cath->x, 855.68f, 0.01f);
+    EXPECT_NEAR(cath->y, 1321.50f, 0.01f);
+    EXPECT_EQ(cath->recommendedLevel, 40u);
+    EXPECT_EQ(cath->heroicLevel, 0u);
+
+    // Every token resolves to a wing of the map's layout.
+    DungeonWingLayout const* layout = DungeonWingRegistry::Get(189);
+    ASSERT_NE(layout, nullptr);
+    for (char const* token : { "sm-s1", "sm-s2", "sm-s3", "sm-s4", "sm-gy", "sm-lib", "sm-arm", "sm-cath" })
+    {
+        Row const* row = Find(token);
+        ASSERT_NE(row, nullptr) << token;
+        EXPECT_NE(DungeonWingRegistry::FindWing(*layout, row->token), nullptr) << token;
+    }
+}
+
 TEST(DcTestDungeonRegistryTest, BlackrockSpireRowsAreItsWings)
 {
     Row const* lbrs = Find("lbrs");

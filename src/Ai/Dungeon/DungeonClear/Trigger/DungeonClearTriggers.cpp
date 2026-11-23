@@ -938,7 +938,44 @@ bool DungeonClearAllClearedTrigger::IsActive()
     if (ownerCtx->GetValue<std::optional<DungeonBossInfo>>(DcKey::NextDungeonBoss)->Get().has_value())
     {
         rs.finalLootHoldSinceMs = 0;
+        rs.finalFightHoldSinceMs = 0;
+        rs.finalFightHoldLogged = false;
         return false;
+    }
+
+    // The last boss is down, but the fight may not be (Herod's death summons
+    // twenty trainees onto the party). Finish it with the run still on, so a wipe
+    // to the adds reads as a wipe, not a clear. Capped; see HoldRunEndForFight.
+    {
+        uint32 const now = getMSTime();
+        bool const armed = rs.finalFightHoldSinceMs != 0;
+        // Every member, not the 12-member capped read: past its cap that one
+        // answers "held", which here would hold every raid run to the cap.
+        bool const fighting = DcCombatFlag::AnyPartyMemberHeldByLiveEnemy(bot, DC_FIGHT_HOLDER_RADIUS);
+        if (DungeonClearMath::HoldRunEndForFight(fighting, now, DC_FINAL_FIGHT_SETTLE_MS, DC_FINAL_FIGHT_CAP_MS,
+                                                 rs.finalFightHoldSinceMs))
+        {
+            // One line per run end: the settle at the arm (every dungeon), and
+            // the fight line only when the hold outlives the settle.
+            if (!armed)
+                LOG_INFO("playerbots.dungeonclear",
+                         "[DC:{}] all cleared: settling {}s before ending the run{}",
+                         bot->GetName(), DC_FINAL_FIGHT_SETTLE_MS / IN_MILLISECONDS,
+                         fighting ? " (party in a fight)" : "");
+            else if (!rs.finalFightHoldLogged &&
+                     getMSTimeDiff(rs.finalFightHoldSinceMs, now) >= DC_FINAL_FIGHT_SETTLE_MS)
+            {
+                rs.finalFightHoldLogged = true;
+                LOG_INFO("playerbots.dungeonclear",
+                         "[DC:{}] all cleared: holding run end while the party fights (up to {}s)",
+                         bot->GetName(), DC_FINAL_FIGHT_CAP_MS / IN_MILLISECONDS);
+            }
+            return false;
+        }
+        if (fighting && !rs.finalLootHoldSinceMs)  // once: the loot hold below arms on its first tick
+            LOG_INFO("playerbots.dungeonclear",
+                     "[DC:{}] all cleared: party still fighting after {}s -> ending run anyway",
+                     bot->GetName(), DC_FINAL_FIGHT_CAP_MS / IN_MILLISECONDS);
     }
 
     // Everything is down — but the last boss's drop may not have been rolled yet.

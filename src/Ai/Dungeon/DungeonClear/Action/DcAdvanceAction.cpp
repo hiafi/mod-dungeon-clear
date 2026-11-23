@@ -2182,9 +2182,11 @@ bool DungeonClearAdvanceAction::Execute(Event /*event*/)
     DcPullPlanner::MaintainScoutCamp(botAI, context);
 
     std::optional<DungeonBossInfo> next = AI_VALUE(std::optional<DungeonBossInfo>, DcKey::NextDungeonBoss);
-    // All cleared, run end held for the last boss's loot (DungeonClearAllClearedTrigger):
-    // nothing is stuck, so don't stall — yield the tick so stock looting runs.
-    if (!next.has_value() && DcRun::Of(context).finalLootHoldSinceMs)
+    // All cleared, run end held for the last fight or the last boss's loot
+    // (DungeonClearAllClearedTrigger): nothing is stuck, so don't stall — yield the
+    // tick so stock combat / looting runs.
+    DcRunState const& endHold = DcRun::Of(context);
+    if (!next.has_value() && (endHold.finalLootHoldSinceMs || endHold.finalFightHoldSinceMs))
     {
         ClearStall(context);
         SetPhase(context, "");

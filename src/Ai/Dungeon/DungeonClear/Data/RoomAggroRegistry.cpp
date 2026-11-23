@@ -11,8 +11,8 @@ namespace
 {
     // Tier-1 MVP scope (deployment-files/docs/mod-dungeon-clear_room-aggro-bosses
     // _plan.md). Radii are read straight from the script that force-pulls the
-    // room, verified against the live source: SM Cathedral CATHEDRAL_PULL_RANGE
-    // 80, Pandemonius ROOM_PULL_RANGE 70, Blackheart/Grand-Champions
+    // room, verified against the live source: Pandemonius ROOM_PULL_RANGE 70,
+    // Blackheart/Grand-Champions
     // CallForHelp(100), Dagran CallForHelp(VISIBLE_RANGE==166), and the SmartAI
     // CALL_FOR_HELP radii for Jammal'an (90), Pusillin (50), Krik'thir (40).
     //
@@ -27,11 +27,64 @@ namespace
     // pure optimisation without changing behaviour.
     RoomAggroBoss const kRoomAggroBosses[] =
     {
-        // SM Cathedral (189): Mograine -> Whitemane. The grid AttackStart fires
-        // on Mograine's engage; both encounter entries are flagged so the room
-        // gate holds whichever the boss index selects.
-        { 189, 3976, 80.0f, {} },   // Highlord Mograine
-        { 189, 3977, 80.0f, {} },   // Inquisitor Whitemane
+        // SM (189), the rework. The stock Cathedral rows (Mograine 3976 and
+        // Whitemane 3977, CATHEDRAL_PULL_RANGE 80) are gone: the rework deletes
+        // the nave's spawns and Mograine never pulls the room (the Last Stand,
+        // ScarletMonasteryEvents). NOT script radii: none of these bosses pulls
+        // a room; the rows clear what the fight would run into. The numbers and
+        // the reasoning per room are DcScarletMonastery::*_ROOM_*
+        // (DungeonEventTables.h, pinned in t/TestRoomAggro with the live-DB
+        // distances). Every row but Loksey's has a
+        // pull-out radius: the computed exclusion (~28yd, the boss's aggro + both
+        // reaches + margin + padding) would leave most of each room up as "comes
+        // with the boss", so the pull-out ring keeps only the units glued to him
+        // and forces the advanced pull-to-camp for the rest (Moroes / Sepethrea).
+        //   Ironspine (6489): his parts land 15-20yd out and the group chases
+        //     them: the 30yd round his lawn home (STAGE-D2); the Haunting
+        //     Phantasm 2.5yd off him comes with him.
+        //   The council (the Fallen Champion 6488; Azshir 3yd behind him is a
+        //     roster boss, never room trash): the 30yd round the lawn spot; the
+        //     Anguished Dead 14.6yd out (wander 5) comes with them.
+        // SM Library (the Graveyard's two rows are above):
+        //   Loksey (3974): the kennel hall round the mouth of his alcove (R-1-LIB
+        //     m3: the pups' NE / SE entries and the 22yd Scent walk run through
+        //     it). The room radius is centered on the live boss in the alcove, so it
+        //     takes 92yd to reach the hall's far packs (the Beastmaster pack 40068
+        //     at 86yd, the Gallants 40076 at 90.5yd); the nearest hostile else
+        //     outside the hall is a Gallant at 98.5yd. No pull-out: the hall starts
+        //     35yd from him.
+        //   Kell (300910): the long hall's case-spot trash (a Monk 1.4yd from the
+        //     north skull case, Diviners and Chaplains 4-7yd from others; R-1-LIB
+        //     m3), 37yd and the Y band of the long hall (y -298 to -350) so the
+        //     reading hall south of it stays Hollis Grey's. His three Diviners
+        //     7.9-11.6yd out come with him.
+        //   Lector Hollis Grey (300913): the reading hall's twelve spawns
+        //     8.7-31.7yd round his pocket (STAGE-D7; a Chaplain patrols the
+        //     aisle); the Diviner 8.7yd and the Monk 11.5yd come with him.
+        // SM Armory and Cathedral:
+        //   Crell (300940): the storeroom's fourteen Protectors, Guardsmen and
+        //     Soldiers 10.4-36.5yd round the anvil, the patrol across it
+        //     included (STAGE-D9: clear before the pull); none comes with him.
+        //     His detection range is 9 (R-2-FW MN-1): the 9yd pull-out keeps
+        //     the 10.4 / 11yd pair as trash and forces the advanced pull, so
+        //     they are dragged to a camp outside his aggro sphere.
+        //   Halden (300942): the five chamber soldiers 11.3-17.9yd and six more
+        //     19.6-27.7yd (STAGE-D10: clear first, pull him alone; detection 10).
+        //   Thorne (300946): the lower garden's Centurion and Defender 20.7 /
+        //     22.7yd (they would drag him in, STAGE-D12), the west entry's
+        //     Myrmidons and Sorcerers and the moved Centurion at its west edge,
+        //     out to 40yd.
+        // Herod and Whitemane have no row: nothing stands within 37yd of the pit,
+        // and the rework empties the nave and crossing.
+        { 189, 6489, 32.0f, {}, false, 0.0f, 0.0f, /*pullOutRadius*/ 14.0f },     // Ironspine
+        { 189, 6488, 30.0f, {}, false, 0.0f, 0.0f, /*pullOutRadius*/ 16.0f },     // the Fallen Champion
+        { 189, 3974, 92.0f, {} },                                                 // Houndmaster Loksey
+        { 189, 300910, 37.0f, {}, /*hasYBand*/ true, /*minY*/ -350.0f, /*maxY*/ -298.0f,
+          /*pullOutRadius*/ 14.0f },                                              // Ambrose Kell
+        { 189, 300913, 33.0f, {}, false, 0.0f, 0.0f, /*pullOutRadius*/ 14.0f },   // Lector Hollis Grey
+        { 189, 300940, 37.0f, {}, false, 0.0f, 0.0f, /*pullOutRadius*/ 9.0f },    // Forgemaster Crell
+        { 189, 300942, 28.0f, {}, false, 0.0f, 0.0f, /*pullOutRadius*/ 9.0f },    // Drillmaster Halden
+        { 189, 300946, 40.0f, {}, false, 0.0f, 0.0f, /*pullOutRadius*/ 12.0f },   // Brother Aldous Thorne
 
         // Scholomance (289) has no row: the Marduk / Vectus students are
         // unattackable props now, so there is no room to clear (see

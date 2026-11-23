@@ -163,7 +163,18 @@ namespace
     // 113yd and keeps 3.29yd off every egg (t/TestBlackrockSpireRouteProbe,
     // 2026-10-19). The tank's leg is an authored anchor route instead
     // (RegisterBlackrockSpireRoute), and the probe pins the untaxed corridor.
-    constexpr std::array<DcNavPenaltyVolume, 18> kVolumes = {{
+    //
+    // Scarlet Monastery (map 189) — the four WING REGIONS, cost 1: regions only.
+    // The wings are physically disconnected (no route crosses between them), so
+    // there is nothing to fence; the rows exist for DcRunWing's fallback, which
+    // asks which wing the party stands in (the map is an Explicit layout since
+    // the rework's Finder sections). A multiplier of 1 leaves every route cost
+    // unchanged and never reads as "inside a fence" (IsInsideRegion is > 1).
+    // The boxes are the rework's wing frames (ScarletMonasteryRework.h
+    // kSections: spawn bounding boxes padded to the starts and exits), with one
+    // generous Z band; they are disjoint in XY. t/TestRunWing pins every start,
+    // boss spot and portal landing inside its own wing's box.
+    constexpr std::array<DcNavPenaltyVolume, 22> kVolumes = {{
         { 229, -134.0f, -406.0f, 33.0f, -118.0f, -374.0f, 56.0f, 40.0f },
         { 229,  -65.5f, -384.0f, 49.4f,  -60.5f, -377.0f, 54.2f, 40.0f },
         { 556,   25.0f,  150.0f, -5.0f,   68.0f,  248.0f, 30.0f, 40.0f },
@@ -190,6 +201,14 @@ namespace
         { 229,   10.0f, -600.0f, -45.0f,   55.0f, -215.0f,  80.0f, 40.0f, "lbrs" },
         // 229 LBRS: the east, south of the entry hall
         { 229,   55.0f, -600.0f, -45.0f,  140.0f, -393.0f,  80.0f, 40.0f, "lbrs" },
+        // 189 SM: the Graveyard (Vishas's halls, the lawn, Thalnos's crypt)
+        { 189, 1670.0f, 1020.0f, -40.0f, 1880.0f, 1460.0f,  80.0f,  1.0f, "sm-gy" },
+        // 189 SM: the Library (the kennel hall, Kell's and Hollis Grey's halls, the Athenaeum)
+        { 189,  100.0f, -470.0f, -40.0f,  300.0f, -180.0f,  80.0f,  1.0f, "sm-lib" },
+        // 189 SM: the Armory
+        { 189, 1595.0f, -470.0f, -40.0f, 1995.0f, -295.0f,  80.0f,  1.0f, "sm-arm" },
+        // 189 SM: the Cathedral
+        { 189,  830.0f, 1290.0f, -40.0f, 1230.0f, 1480.0f,  80.0f,  1.0f, "sm-cath" },
     }};
 
     // ---- polygonal no-go regions ----------------------------------------

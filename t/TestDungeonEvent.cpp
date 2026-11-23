@@ -2003,10 +2003,11 @@ TEST(DungeonEventConditional, ConditionalLatchKeyIsHighAndInjective)
 
 // --- Milestone 3: room-aggro pre-clear -----------------------------------
 
-// The SM Cathedral (189) room-aggro pre-clear is a Conditional gate (condition 3)
-// with a single KillCreature step in "room-trash mode" (creatureEntry 0). It is
-// required (hold the boss pull until the room is clear).
-TEST(DungeonEventRoomAggro, ScarletCathedralEventShape)
+// The Scarlet Monastery (189) room-aggro pre-clear is a Conditional gate
+// (condition 3) with a single KillCreature step in "room-trash mode"
+// (creatureEntry 0). It is required (hold the boss pull until the room is clear).
+// It began as the stock Cathedral's pre-clear; the rework's rooms use it now.
+TEST(DungeonEventRoomAggro, ScarletRoomAggroEventShape)
 {
     DungeonEvent const* e = DungeonEventRegistry::Find(189, 1);
     ASSERT_NE(e, nullptr);
@@ -2016,6 +2017,119 @@ TEST(DungeonEventRoomAggro, ScarletCathedralEventShape)
     ASSERT_EQ(e->steps.size(), 1u);
     EXPECT_EQ(e->steps[0].kind, EventStepKind::KillCreature);
     EXPECT_EQ(e->steps[0].creatureEntry, 0u);  // room-trash mode
+}
+
+// Scarlet Monastery (189): the hard mode triggers are human work (D4H's
+// gravestones and blood rite, D8H's evidence pages, D14H's Torch; Herod's is a
+// /taunt) and the sealed doors are the scripts' (Doan's Chamber Seal; Herod's
+// Lever, unselectable while he fights; the High Inquisitor's Door and the Secret
+// Door). No event step on the map may name one: DC clicks doors, chests and
+// event-step objects only, so this is the whole of "bots never touch them". The
+// one object an SM event clicks is the Chapel Door (the Last Stand's start).
+TEST(DungeonEventScarletMonastery, NeverClicksAHardModeTriggerOrTheSeal)
+{
+    namespace S = DcScarletMonastery;
+    auto const forbidden = [](uint32 go)
+    {
+        return (go >= S::GO_DESECRATION_FIRST && go <= S::GO_DESECRATION_LAST) ||
+               (go >= S::GO_HERESY_PAGE_FIRST && go <= S::GO_HERESY_PAGE_LAST) || go == S::GO_CHAMBER_SEAL ||
+               go == S::GO_TORCH || go == S::GO_SECRET_DOOR || go == S::GO_HERODS_LEVER ||
+               go == S::GO_HERODS_DOOR || go == S::GO_HIGH_INQUISITOR_DOOR || go == S::GO_CHAPEL_LEVER;
+    };
+    EXPECT_TRUE(forbidden(301310) && forbidden(301314) && forbidden(301320) && forbidden(301323));
+    EXPECT_TRUE(forbidden(97701) && forbidden(97700) && forbidden(101855) && forbidden(104600));
+    std::vector<uint32> clicked;
+    for (DungeonEvent const& e : DungeonEventRegistry::AllEvents())
+    {
+        if (e.mapId != S::MAP_ID)
+            continue;
+        for (EventStep const& step : e.steps)
+        {
+            EXPECT_FALSE(forbidden(step.goEntry)) << e.id << " names GO " << step.goEntry;
+            if (step.goEntry)
+                clicked.push_back(step.goEntry);
+        }
+    }
+    EXPECT_EQ(clicked, std::vector<uint32>{ S::GO_CHAPEL_DOOR });
+
+    // The script-owned doors are never opened by the generic door rung either.
+    for (uint32 go : { S::GO_CHAMBER_SEAL, S::GO_HIGH_INQUISITOR_DOOR, S::GO_SECRET_DOOR })
+        EXPECT_TRUE(DcEventDoorRegistry::IsScriptOnly(go)) << go;
+}
+
+// The Last Stand (STAGE-D13's DC contract). The Chapel Door's use starts it, so
+// one anchored, persistent event owns the door: kill the landing's door
+// Centurions, open the door, walk into the nave and hold there until slot 5
+// (BOSS_LAST_STAND) reads DONE at Mograine's fall. Mograine is never pulled.
+TEST(DungeonEventScarletMonastery, LastStandOpensTheChapelDoorAndHoldsTheNave)
+{
+    namespace S = DcScarletMonastery;
+    DungeonEvent const* e = DungeonEventRegistry::Find(S::MAP_ID, S::EVENT_LAST_STAND);
+    ASSERT_NE(e, nullptr);
+    EXPECT_EQ(e->activation, EventActivation::Anchored);
+    EXPECT_TRUE(e->persistent);
+    EXPECT_TRUE(e->required);
+    EXPECT_EQ(e->gate, DcDifficultyGate::Any);
+    EXPECT_FALSE(DungeonEventRegistry::IsRoomAggroPreClear(*e));
+    ASSERT_EQ(e->steps.size(), 4u);
+
+    // 1. The landing's door Centurions (39993 / 39994 / 39996 / 39997, 11.9-16.9yd
+    //    from the objective) before the door; the floor band keeps the lower
+    //    garden (z 27.4) out.
+    EventStep const& clear = e->steps[0];
+    EXPECT_EQ(clear.kind, EventStepKind::ClearRadius);
+    EXPECT_FLOAT_EQ(clear.x, S::LANDING_X);
+    EXPECT_FLOAT_EQ(clear.y, S::LANDING_Y);
+    struct Spot { float x, y, z; };
+    for (Spot c : { Spot{ 1063.1f, 1382.2f, 30.85f }, Spot{ 1064.4f, 1387.3f, 30.85f },
+                    Spot{ 1064.8f, 1410.8f, 30.85f }, Spot{ 1063.2f, 1415.9f, 30.85f } })
+    {
+        EXPECT_LT(std::hypot(c.x - clear.x, c.y - clear.y), clear.radius) << c.y;
+        EXPECT_LE(std::fabs(c.z - clear.z), clear.zBand) << c.y;
+    }
+    EXPECT_GT(std::fabs(27.39f - clear.z), clear.zBand);
+
+    // 2. The door: from the landing outside it (8yd west, in its opening).
+    EventStep const& door = e->steps[1];
+    EXPECT_EQ(door.kind, EventStepKind::UseGameObject);
+    EXPECT_EQ(door.goEntry, S::GO_CHAPEL_DOOR);
+    EXPECT_FALSE(door.reportUse);
+    EXPECT_LT(S::LANDING_X, S::CHAPEL_DOOR_X);
+    EXPECT_LT(std::hypot(S::LANDING_X - S::CHAPEL_DOOR_X, S::LANDING_Y - S::CHAPEL_DOOR_Y), door.radius);
+
+    // 3-4. Into the nave and hold until the stand is DONE. The walk is a short hop
+    //      down the center aisle and crosses the strip where the instance restarts
+    //      a wiped stand; the hold keeps clear of Mograine on the altar steps.
+    EventStep const& walk = e->steps[2];
+    EventStep const& hold = e->steps[3];
+    EXPECT_EQ(walk.kind, EventStepKind::MoveTo);
+    EXPECT_EQ(hold.kind, EventStepKind::MoveTo);
+    EXPECT_FLOAT_EQ(walk.x, hold.x);
+    EXPECT_FLOAT_EQ(walk.y, hold.y);
+    EXPECT_LT(std::hypot(walk.x - S::CHAPEL_DOOR_X, walk.y - S::CHAPEL_DOOR_Y), 40.0f);
+    EXPECT_GT(walk.x, S::CROSSING_MAX_X);
+    EXPECT_GE(S::CHAPEL_DOOR_Y, S::CROSSING_MIN_Y);
+    EXPECT_LE(S::CHAPEL_DOOR_Y, S::CROSSING_MAX_Y);
+    EXPECT_GE(walk.y, S::CROSSING_MIN_Y);
+    EXPECT_LE(walk.y, S::CROSSING_MAX_Y);
+    EXPECT_GT(std::hypot(hold.x - S::MOGRAINE_X, hold.y - S::MOGRAINE_Y), 45.0f);
+    EXPECT_EQ(hold.bossStateId, S::SLOT_LAST_STAND);
+    EXPECT_EQ(hold.bossStateClearMask, DcBossStateBit(S::STATE_DONE));
+    EXPECT_EQ(hold.restartOnBossStateMask, 0u);
+    EXPECT_EQ(hold.timeoutMs, S::LAST_STAND_TIMEOUT_MS);
+    EXPECT_EQ(DecideBossStateGate(S::STATE_DONE, hold.bossStateClearMask, hold.restartOnBossStateMask),
+              BossStateGateVerdict::Clear);
+    for (uint32 state : { 0u, 1u, 2u })
+        EXPECT_EQ(DecideBossStateGate(state, hold.bossStateClearMask, hold.restartOnBossStateMask),
+                  BossStateGateVerdict::Hold) << state;
+
+    // The door cluster is the event's alone: navigation never flags or opens it.
+    EXPECT_TRUE(DcEventDoorRegistry::IsNavigationIgnored(S::GO_CHAPEL_DOOR));
+    EXPECT_TRUE(DcEventDoorRegistry::IsNavigationIgnored(S::GO_CHAPEL_LEVER));
+    // Herod's Door is the party's to open on the way in (keyless; never ignored).
+    EXPECT_FALSE(DcEventDoorRegistry::IsNavigationIgnored(S::GO_HERODS_DOOR));
+    EXPECT_FALSE(DcEventDoorRegistry::IsScriptOnly(S::GO_HERODS_DOOR));
+    EXPECT_TRUE(DcEventDoorRegistry::IsKeyExempt(S::GO_HERODS_DOOR));
 }
 
 // Scholomance (289) has no event rows: the Viewing Room students are unattackable

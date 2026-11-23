@@ -3669,3 +3669,75 @@ TEST(DungeonClearLeaderAssistTest, GroupmateFallbackHasHysteresis)
     // A real round-the-corner distance walks again.
     EXPECT_FALSE(DungeonClearMath::LeaderAssistFallbackYields(15.1f, true, in, out));
 }
+
+// ===== Run-end fight hold (HoldRunEndForFight, R-2-FW MN-2) =====
+
+// The kill tick arms the clock and holds through the settle window even with no
+// fight yet: the trainees Herod's death summons need a moment to engage.
+TEST(DungeonClearMathTest, RunEndFightHoldSettlesFirst)
+{
+    std::uint32_t since = 0;
+    EXPECT_TRUE(DungeonClearMath::HoldRunEndForFight(false, 10000, 3000, 120000, since));
+    EXPECT_EQ(since, 10000u);
+    EXPECT_TRUE(DungeonClearMath::HoldRunEndForFight(false, 12999, 3000, 120000, since));
+    EXPECT_FALSE(DungeonClearMath::HoldRunEndForFight(false, 13000, 3000, 120000, since));
+}
+
+// Past the settle window the run end waits for the fight, up to the cap.
+TEST(DungeonClearMathTest, RunEndFightHoldWaitsForTheFightUpToTheCap)
+{
+    std::uint32_t since = 0;
+    EXPECT_TRUE(DungeonClearMath::HoldRunEndForFight(true, 5000, 3000, 120000, since));
+    EXPECT_TRUE(DungeonClearMath::HoldRunEndForFight(true, 65000, 3000, 120000, since));   // the trainees, 60 s in
+    EXPECT_FALSE(DungeonClearMath::HoldRunEndForFight(false, 66000, 3000, 120000, since));  // fight over -> end
+    std::uint32_t stuck = 0;
+    EXPECT_TRUE(DungeonClearMath::HoldRunEndForFight(true, 5000, 3000, 120000, stuck));
+    EXPECT_TRUE(DungeonClearMath::HoldRunEndForFight(true, 124999, 3000, 120000, stuck));
+    EXPECT_FALSE(DungeonClearMath::HoldRunEndForFight(true, 125000, 3000, 120000, stuck));  // capped
+}
+
+// The ms-0 arm (and a small step back) never ends the hold early, and a hold that spans the 49.7-day
+// getMSTime() wrap counts elapsed time across it (getMSTimeDiff semantics), so
+// the settle and the cap still end (RF-2 mi-2).
+TEST(DungeonClearMathTest, RunEndFightHoldClockEdges)
+{
+    std::uint32_t since = 0;
+    EXPECT_TRUE(DungeonClearMath::HoldRunEndForFight(false, 0, 3000, 120000, since));
+    EXPECT_EQ(since, 1u);
+    EXPECT_TRUE(DungeonClearMath::HoldRunEndForFight(false, 0, 3000, 120000, since));
+    EXPECT_FALSE(DungeonClearMath::HoldRunEndForFight(false, 3001, 3000, 120000, since));   // 3,000 ms after the arm
+
+    std::uint32_t wrap = 0;
+    EXPECT_TRUE(DungeonClearMath::HoldRunEndForFight(false, 0xFFFFF800u, 3000, 120000, wrap));   // 2,048 ms to the wrap
+    EXPECT_EQ(wrap, 0xFFFFF800u);
+    EXPECT_TRUE(DungeonClearMath::HoldRunEndForFight(false, 0x00000100u, 3000, 120000, wrap));   // 2,304 ms: settling
+    EXPECT_FALSE(DungeonClearMath::HoldRunEndForFight(false, 0x00000800u, 3000, 120000, wrap));  // 4,096 ms: settled
+    std::uint32_t wrapFight = 0xFFFFF000u;
+    EXPECT_TRUE(DungeonClearMath::HoldRunEndForFight(true, 0x00000800u, 3000, 120000, wrapFight));  // 6,144 ms
+    EXPECT_TRUE(DungeonClearMath::HoldRunEndForFight(true, 0xFFFFF000u + 119999u, 3000, 120000, wrapFight));
+    EXPECT_FALSE(DungeonClearMath::HoldRunEndForFight(true, 0xFFFFF000u + 120000u, 3000, 120000, wrapFight));  // capped
+}
+
+// The party holder scan (RF-2 mi-1): capped, it answers "held" past the cap
+// with nobody held; uncapped (0) it scans every member. Up to 12 members both
+// give the same answer, so five-man runs are unchanged.
+TEST(DungeonClearMathTest, PartyHolderScanCapAndFullScan)
+{
+    auto const held = [](bool b) { return b; };
+    std::vector<bool> five(4, false);
+    EXPECT_FALSE(DungeonClearMath::ScanPartyForHolder(five, held, 12));
+    EXPECT_FALSE(DungeonClearMath::ScanPartyForHolder(five, held, 0));
+    five[2] = true;
+    EXPECT_TRUE(DungeonClearMath::ScanPartyForHolder(five, held, 12));
+    EXPECT_TRUE(DungeonClearMath::ScanPartyForHolder(five, held, 0));
+
+    std::vector<bool> twelve(12, false);
+    EXPECT_FALSE(DungeonClearMath::ScanPartyForHolder(twelve, held, 12));
+    EXPECT_FALSE(DungeonClearMath::ScanPartyForHolder(twelve, held, 0));
+
+    std::vector<bool> raid(24, false);   // a 25-man run, nobody fighting
+    EXPECT_TRUE(DungeonClearMath::ScanPartyForHolder(raid, held, 12));    // the capped answer
+    EXPECT_FALSE(DungeonClearMath::ScanPartyForHolder(raid, held, 0));    // the run-end answer
+    raid[20] = true;                     // one member past the cap is held
+    EXPECT_TRUE(DungeonClearMath::ScanPartyForHolder(raid, held, 0));
+}

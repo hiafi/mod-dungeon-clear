@@ -15,13 +15,14 @@
 #include "Ai/Dungeon/DungeonClear/Data/DcNavPenaltyRegistry.h"
 #include "Ai/Dungeon/DungeonClear/Data/DungeonWingRegistry.h"
 #include "Ai/Dungeon/DungeonClear/Data/Events/DungeonEventTables.h"
+#include "Ai/Dungeon/DungeonClear/Data/Events/DungeonRosterBuilders.h"
 #include "Ai/Dungeon/DungeonClear/Overrides/BossRosterRegistry.h"
 #include "Ai/Dungeon/DungeonClear/Util/DcBossOrdering.h"
 #include "Ai/Dungeon/DungeonClear/Util/DcRunWing.h"
 #include "TestRun/DcTestDungeonRegistry.h"
 
-// The run wing (Blackrock Spire LBRS / UBRS, Blackrock Depths' four Finder
-// sections): the wing layout data, the resolver's order and latch rules, the
+// The run wing (Blackrock Spire LBRS / UBRS, Blackrock Depths' and Scarlet
+// Monastery's four Finder sections): the wing layout data, the resolver's order and latch rules, the
 // fallback at the shared portal, the wing filter and the terminal-boss rule. All
 // pure — no world, no bots.
 
@@ -131,15 +132,14 @@ TEST(DcRunWingTest, LfgDungeonPicksTheWing)
     EXPECT_EQ(DungeonWingRegistry::WingForLfgDungeon(36, 32), nullptr);   // not a split map
 }
 
-TEST(DcRunWingTest, DireMaulAndScarletMonasteryStayProximity)
+TEST(DcRunWingTest, DireMaulStaysProximity)
 {
-    for (uint32 map : { 429u, 189u })
-    {
-        DungeonWingLayout const* layout = DungeonWingRegistry::Get(map);
-        ASSERT_NE(layout, nullptr) << map;
-        EXPECT_TRUE(layout->isolated) << map;
-        EXPECT_EQ(layout->select, WingSelect::Proximity) << map;
-    }
+    // Scarlet Monastery left Proximity with the rework's Finder sections (an
+    // Explicit layout like Blackrock Depths: see the Scarlet Monastery block).
+    DungeonWingLayout const* layout = DungeonWingRegistry::Get(429);
+    ASSERT_NE(layout, nullptr);
+    EXPECT_TRUE(layout->isolated);
+    EXPECT_EQ(layout->select, WingSelect::Proximity);
 }
 
 TEST(DcRunWingTest, MaraudonLfgWingsAndWholeDungeonDefault)
@@ -775,4 +775,455 @@ TEST(DcRunWingTest, EachSectionEndsOnItsOwnLastBoss)
     // Argelmach is not in a section 4 list, nor the Emperor in a section 3 one.
     EXPECT_FALSE(DcRunWing::TerminalDone(s4, s3List, 1u << 10, true));
     EXPECT_FALSE(DcRunWing::TerminalDone(s3, s4List, 1u << 18, true));
+}
+
+// ---- Scarlet Monastery (map 189): the rework's four Finder sections ----------------
+
+namespace
+{
+    namespace S = DcScarletMonastery;
+
+    // What BossSpawnIndex yields for 189 on the reworked server: every encounter
+    // with a kill-creature credit and a static spawn, in DBC-bit order. The
+    // council (bit 8, credit spell 212300) and the Last Stand (bit 5, credit
+    // spell 212301) are never here, and neither is Fairbanks (449 re-pointed).
+    // Ironspine stands at his lawn home (rev_ironspine), Kell, Hollis Grey, Crell,
+    // Halden and Thorne at their new spawns, Whitemane in her chamber.
+    std::vector<DungeonBossInfo> SmSpawnIndex()
+    {
+        return {
+            Boss(S::NPC_VISHAS,      S::BIT_VISHAS,      1786.55f, 1124.44f,   7.57f, S::MAP_ID),
+            Boss(S::NPC_THALNOS,     S::BIT_THALNOS,     1820.34f, 1416.71f,  -7.92f, S::MAP_ID),
+            Boss(S::NPC_LOKSEY,      S::BIT_LOKSEY,       119.94f, -260.87f,  18.63f, S::MAP_ID),
+            Boss(S::NPC_DOAN,        S::BIT_DOAN,         148.32f, -428.69f,  18.49f, S::MAP_ID),
+            Boss(S::NPC_HEROD,       S::BIT_HEROD,       1965.09f, -431.61f,   6.26f, S::MAP_ID),
+            Boss(S::NPC_WHITEMANE,   S::BIT_WHITEMANE,   1202.13f, 1399.07f,  29.09f, S::MAP_ID),
+            Boss(S::NPC_IRONSPINE,   S::BIT_IRONSPINE,   1796.5f,  1285.5f,   18.8f,  S::MAP_ID),
+            Boss(S::NPC_KELL,        S::BIT_KELL,         242.8f,  -329.2f,   18.9f,  S::MAP_ID),
+            Boss(S::NPC_HOLLIS_GREY, S::BIT_HOLLIS_GREY,  254.8f,  -389.2f,   20.49f, S::MAP_ID),
+            Boss(S::NPC_CRELL,       S::BIT_CRELL,       1776.0f,  -390.5f,    8.0f,  S::MAP_ID),
+            Boss(S::NPC_HALDEN,      S::BIT_HALDEN,      1875.0f,  -400.0f,   18.7f,  S::MAP_ID),
+            Boss(S::NPC_THORNE,      S::BIT_THORNE,       908.2f,  1399.2f,   19.0f,  S::MAP_ID),
+        };
+    }
+
+    std::vector<DungeonBossInfo> SmRoster(std::vector<DungeonBossInfo> base = SmSpawnIndex())
+    {
+        return BossRosterRegistry::Apply(S::MAP_ID, DcDiffKey::Dungeon(DUNGEON_DIFFICULTY_NORMAL), std::move(base));
+    }
+
+    DungeonWingLayout const& Sm()
+    {
+        DungeonWingLayout const* layout = DungeonWingRegistry::Get(S::MAP_ID);
+        EXPECT_NE(layout, nullptr);
+        return *layout;
+    }
+
+    std::vector<DungeonBossInfo> SmWing(char const* token, std::vector<DungeonBossInfo> const& roster)
+    {
+        DungeonWing const* wing = DungeonWingRegistry::FindWing(Sm(), token);
+        EXPECT_NE(wing, nullptr) << token;
+        return wing ? DcRunWing::FilterToWing(roster, *wing) : std::vector<DungeonBossInfo>{};
+    }
+
+    std::vector<uint32> Entries(std::vector<DungeonBossInfo> const& list)
+    {
+        std::vector<uint32> out;
+        for (DungeonBossInfo const& b : list)
+            out.push_back(b.entry);
+        return out;
+    }
+
+    // The order a run takes: the picker from a fresh start, then advancing past
+    // each boss as it dies (its bit set), the way NextDungeonBossValue drives it.
+    std::vector<uint32> PickOrder(std::vector<DungeonBossInfo> list)
+    {
+        std::vector<uint32> order;
+        uint32 mask = 0;
+        uint32 sticky = 0;
+        uint32 stickyKey = 0;
+        bool haveSticky = false;
+        for (int guard = 0; guard < 16; ++guard)
+        {
+            std::vector<DungeonBossInfo> cands;
+            for (DungeonBossInfo const& b : list)
+                if (!(b.encounterIndex < 32 && (mask & (1u << b.encounterIndex))))
+                    cands.push_back(b);
+            std::optional<DungeonBossInfo> pick =
+                DcBossOrdering::PickTarget(cands, sticky, stickyKey, haveSticky);
+            if (!pick)
+                break;
+            order.push_back(pick->entry);
+            mask |= 1u << pick->encounterIndex;
+            sticky = pick->entry;
+            stickyKey = BossOrderKey(*pick);
+            haveSticky = true;
+        }
+        return order;
+    }
+
+    struct SmSpot
+    {
+        float x;
+        float y;
+        float z;
+        char const* what;
+    };
+}
+
+TEST(DcRunWingTest, ScarletMonasteryIsAnExplicitSectionLayout)
+{
+    DungeonWingLayout const& layout = Sm();
+    EXPECT_TRUE(layout.isolated);
+    EXPECT_EQ(layout.select, WingSelect::Explicit);
+    EXPECT_EQ(layout.defaultWing, "sm-gy");
+    ASSERT_EQ(layout.wings.size(), 4u);
+
+    DungeonWing const* gy = DungeonWingRegistry::FindWing(layout, "sm-gy");
+    DungeonWing const* lib = DungeonWingRegistry::FindWing(layout, "sm-lib");
+    ASSERT_NE(gy, nullptr);
+    ASSERT_NE(lib, nullptr);
+    EXPECT_EQ(gy->lfgDungeonId, 18u);
+    EXPECT_EQ(gy->lfgHeroicDungeonId, 314u);
+    EXPECT_EQ(gy->terminalBossEntry, 4543u);      // Bloodmage Thalnos
+    EXPECT_EQ(gy->encounterMask, 0x183u);         // bits 0, 1, 7, 8
+    EXPECT_EQ(lib->lfgDungeonId, 165u);
+    EXPECT_EQ(lib->lfgHeroicDungeonId, 315u);
+    EXPECT_EQ(lib->terminalBossEntry, 6487u);     // Arcanist Doan
+    EXPECT_EQ(lib->encounterMask, 0x60Cu);        // bits 2, 3, 9, 10
+    EXPECT_EQ(gy->encounterMask & lib->encounterMask, 0u);
+
+    DungeonWing const* arm = DungeonWingRegistry::FindWing(layout, "sm-arm");
+    DungeonWing const* cath = DungeonWingRegistry::FindWing(layout, "sm-cath");
+    ASSERT_NE(arm, nullptr);
+    ASSERT_NE(cath, nullptr);
+    EXPECT_EQ(arm->lfgDungeonId, 163u);
+    EXPECT_EQ(arm->lfgHeroicDungeonId, 316u);
+    EXPECT_EQ(arm->terminalBossEntry, 3975u);     // Herod
+    EXPECT_EQ(arm->encounterMask, 0x1810u);       // bits 4, 11, 12
+    EXPECT_EQ(cath->lfgDungeonId, 164u);
+    EXPECT_EQ(cath->lfgHeroicDungeonId, 317u);
+    EXPECT_EQ(cath->terminalBossEntry, 3977u);    // High Inquisitor Whitemane
+    EXPECT_EQ(cath->encounterMask, 0x2060u);      // bits 5, 6, 13
+
+    // The four masks split the 14 encounters (bit = slot 0-13) with no overlap.
+    uint32 seen = 0;
+    for (DungeonWing const* wing : { gy, lib, arm, cath })
+    {
+        EXPECT_EQ(seen & wing->encounterMask, 0u) << wing->token;
+        seen |= wing->encounterMask;
+    }
+    EXPECT_EQ(seen, 0x3FFFu);
+    EXPECT_EQ(DungeonWingRegistry::WingOf(S::MAP_ID, S::NPC_HEROD)->token, "sm-arm");
+    EXPECT_EQ(DungeonWingRegistry::WingOf(S::MAP_ID, S::NPC_WHITEMANE)->token, "sm-cath");
+    EXPECT_EQ(DungeonWingRegistry::WingOf(S::MAP_ID, DcRoster::OBJ(S::OBJ_LAST_STAND))->token, "sm-cath");
+    // Mograine is no wing's boss any more (D13: never pulled).
+    EXPECT_EQ(DungeonWingRegistry::WingOf(S::MAP_ID, S::NPC_MOGRAINE), nullptr);
+}
+
+TEST(DcRunWingTest, ScarletMonasteryLfgDungeonPicksTheSection)
+{
+    for (uint32 lfg : { 18u, 314u })
+    {
+        DungeonWing const* wing = DungeonWingRegistry::WingForLfgDungeon(S::MAP_ID, lfg);
+        ASSERT_NE(wing, nullptr) << lfg;
+        EXPECT_EQ(wing->token, "sm-gy") << lfg;
+    }
+    for (uint32 lfg : { 165u, 315u })
+    {
+        DungeonWing const* wing = DungeonWingRegistry::WingForLfgDungeon(S::MAP_ID, lfg);
+        ASSERT_NE(wing, nullptr) << lfg;
+        EXPECT_EQ(wing->token, "sm-lib") << lfg;
+    }
+    for (uint32 lfg : { 163u, 316u })
+    {
+        DungeonWing const* wing = DungeonWingRegistry::WingForLfgDungeon(S::MAP_ID, lfg);
+        ASSERT_NE(wing, nullptr) << lfg;
+        EXPECT_EQ(wing->token, "sm-arm") << lfg;
+    }
+    for (uint32 lfg : { 164u, 317u })
+    {
+        DungeonWing const* wing = DungeonWingRegistry::WingForLfgDungeon(S::MAP_ID, lfg);
+        ASSERT_NE(wing, nullptr) << lfg;
+        EXPECT_EQ(wing->token, "sm-cath") << lfg;
+    }
+}
+
+TEST(DcRunWingTest, EveryScarletMonasteryEntryIsInExactlyOneWing)
+{
+    for (DungeonWing const& wing : Sm().wings)
+        for (uint32 entry : wing.bossEntries)
+        {
+            DungeonWing const* owner = DungeonWingRegistry::WingOf(S::MAP_ID, entry);
+            ASSERT_NE(owner, nullptr) << entry;
+            EXPECT_EQ(owner->token, wing.token) << entry;
+        }
+
+    // Every roster row lands in a wing (none silently filtered out of every run).
+    for (DungeonBossInfo const& b : SmRoster())
+        EXPECT_NE(DungeonWingRegistry::WingOf(S::MAP_ID, b.entry), nullptr) << b.entry << " " << b.name;
+}
+
+TEST(DcRunWingTest, GraveyardRunsVishasIronspineTheCouncilThalnos)
+{
+    std::vector<DungeonBossInfo> const gy = SmWing("sm-gy", SmRoster());
+    std::vector<uint32> const want = { S::NPC_VISHAS, S::NPC_IRONSPINE, S::NPC_FALLEN_CHAMPION, S::NPC_AZSHIR,
+                                       S::NPC_THALNOS };
+    EXPECT_EQ(Entries(gy), want);
+
+    // The council: both units on its spell-credit bit 8 at the lawn spot, the
+    // Champion first; the bits stay the real ones for every boss.
+    ASSERT_EQ(gy.size(), 5u);
+    EXPECT_EQ(gy[0].encounterIndex, S::BIT_VISHAS);
+    EXPECT_EQ(gy[1].encounterIndex, S::BIT_IRONSPINE);
+    EXPECT_EQ(gy[2].encounterIndex, S::BIT_COUNCIL);
+    EXPECT_EQ(gy[3].encounterIndex, S::BIT_COUNCIL);
+    EXPECT_EQ(gy[4].encounterIndex, S::BIT_THALNOS);
+    EXPECT_EQ(gy[2].kind, DungeonAnchorKind::Boss);
+    EXPECT_EQ(gy[3].kind, DungeonAnchorKind::Boss);
+    EXPECT_EQ(gy[2].doneBossStateIndex, -1);
+    EXPECT_NEAR(gy[2].x, 1798.5f, 0.01f);
+    EXPECT_NEAR(gy[2].y, 1348.5f, 0.01f);
+    EXPECT_NEAR(std::hypot(gy[3].x - gy[2].x, gy[3].y - gy[2].y), 3.0f, 0.01f);   // Azshir 3yd behind
+
+    // The run order the picker takes: the council's two anchors share one kill,
+    // so one pull clears both and the run goes on to Thalnos.
+    std::vector<uint32> const order = PickOrder(gy);
+    std::vector<uint32> const wantOrder = { S::NPC_VISHAS, S::NPC_IRONSPINE, S::NPC_FALLEN_CHAMPION,
+                                            S::NPC_THALNOS };
+    EXPECT_EQ(order, wantOrder);
+}
+
+// R-1-GY MN-3: Ironspine and the council share the lawn, 63yd apart, and each
+// fight's 40yd disc reaches within 23yd of the other. The run kills Ironspine
+// first (his home is on the walk up from Vishas), and a fight held at his home
+// (parts land within 20yd of him) stays outside the council's aggro reach
+// (detection 20 + both reaches 1.5 + margin 2 + padding 3, the DC sphere). The
+// council dies before Thalnos, so a lit Desecration lockout (its stones refuse
+// while the council lives) never meets a live council (D4H).
+TEST(DcRunWingTest, GraveyardKillsIronspineBeforeTheCouncilAndTheCouncilBeforeThalnos)
+{
+    EXPECT_LT(S::ORDER_VISHAS, S::ORDER_IRONSPINE);
+    EXPECT_LT(S::ORDER_IRONSPINE, S::ORDER_COUNCIL);
+    EXPECT_LT(S::ORDER_COUNCIL, S::ORDER_THALNOS);
+
+    float const apart = std::hypot(S::CHAMPION_X - S::IRONSPINE_X, S::CHAMPION_Y - S::IRONSPINE_Y);
+    EXPECT_NEAR(apart, 63.0f, 0.1f);
+    float const councilAggroReach = 20.0f + 1.5f + 1.5f + 2.0f + 3.0f;
+    EXPECT_GT(apart - S::IRONSPINE_PART_LAND_MAX, councilAggroReach + 10.0f);
+
+    // Neither room's pre-clear reaches the other boss's spot.
+    EXPECT_LT(S::IRONSPINE_ROOM_RADIUS, apart);
+    EXPECT_LT(S::COUNCIL_ROOM_RADIUS, apart);
+}
+
+TEST(DcRunWingTest, CouncilAnchorsHandOverWhenTheChampionFallsFirst)
+{
+    // The Champion's corpse (his normal-mode raises spent) while Azshir stands:
+    // the picker leaves the dead anchor and finishes the same-key sibling before
+    // advancing to Thalnos.
+    std::vector<DungeonBossInfo> const gy = SmWing("sm-gy", SmRoster());
+    std::vector<DungeonBossInfo> cands;
+    for (DungeonBossInfo const& b : gy)
+        if (b.entry != S::NPC_VISHAS && b.entry != S::NPC_IRONSPINE && b.entry != S::NPC_FALLEN_CHAMPION)
+            cands.push_back(b);
+    std::optional<DungeonBossInfo> next =
+        DcBossOrdering::PickTarget(cands, S::NPC_FALLEN_CHAMPION, S::ORDER_COUNCIL, true);
+    ASSERT_TRUE(next.has_value());
+    EXPECT_EQ(next->entry, S::NPC_AZSHIR);
+}
+
+TEST(DcRunWingTest, CouncilIsListedOnceEvenWithACreatureCredit)
+{
+    // A database whose council still had a creature credit would derive the
+    // Champion on bit 8 itself: the patch removes it first, so there is still one
+    // anchor per unit.
+    std::vector<DungeonBossInfo> base = SmSpawnIndex();
+    base.push_back(Boss(S::NPC_FALLEN_CHAMPION, S::BIT_COUNCIL, 1756.17f, 1345.45f, 19.37f, S::MAP_ID));
+    std::vector<DungeonBossInfo> const gy = SmWing("sm-gy", SmRoster(base));
+    EXPECT_EQ(std::count_if(gy.begin(), gy.end(),
+                            [](DungeonBossInfo const& b) { return b.entry == S::NPC_FALLEN_CHAMPION; }),
+              1);
+    for (DungeonBossInfo const& b : gy)
+        if (b.entry == S::NPC_FALLEN_CHAMPION)
+            EXPECT_NEAR(b.x, S::CHAMPION_X, 0.01f) << "the lawn spot, not the stock grave spawn";
+}
+
+TEST(DcRunWingTest, LibraryRunsLokseyKellHollisGreyDoan)
+{
+    std::vector<DungeonBossInfo> const lib = SmWing("sm-lib", SmRoster());
+    std::vector<uint32> const want = { S::NPC_LOKSEY, S::NPC_KELL, S::NPC_HOLLIS_GREY, S::NPC_DOAN };
+    EXPECT_EQ(Entries(lib), want);
+    EXPECT_EQ(PickOrder(lib), want);
+    // Reordered, never re-bitted: completion keys on the real bits.
+    ASSERT_EQ(lib.size(), 4u);
+    EXPECT_EQ(lib[0].encounterIndex, S::BIT_LOKSEY);
+    EXPECT_EQ(lib[1].encounterIndex, S::BIT_KELL);
+    EXPECT_EQ(lib[2].encounterIndex, S::BIT_HOLLIS_GREY);
+    EXPECT_EQ(lib[3].encounterIndex, S::BIT_DOAN);
+}
+
+TEST(DcRunWingTest, ArmoryRunsCrellHaldenHerod)
+{
+    std::vector<DungeonBossInfo> const arm = SmWing("sm-arm", SmRoster());
+    std::vector<uint32> const want = { S::NPC_CRELL, S::NPC_HALDEN, S::NPC_HEROD };
+    EXPECT_EQ(Entries(arm), want);
+    EXPECT_EQ(PickOrder(arm), want);
+    // Reordered, never re-bitted: the DBC bits alone would take Herod (4) first.
+    ASSERT_EQ(arm.size(), 3u);
+    EXPECT_EQ(arm[0].encounterIndex, S::BIT_CRELL);
+    EXPECT_EQ(arm[1].encounterIndex, S::BIT_HALDEN);
+    EXPECT_EQ(arm[2].encounterIndex, S::BIT_HEROD);
+    EXPECT_LT(S::BIT_HEROD, S::BIT_CRELL);
+}
+
+// Thorne -> the Last Stand (the Chapel Door objective) -> Whitemane at her vigil.
+// The DBC bits alone would take Whitemane (6, the terminal) before Thorne (13):
+// the run would end with Thorne alive. Mograine is never on the list (D13).
+TEST(DcRunWingTest, CathedralRunsThorneTheLastStandWhitemane)
+{
+    std::vector<DungeonBossInfo> const cath = SmWing("sm-cath", SmRoster());
+    std::vector<uint32> const want = { S::NPC_THORNE, DcRoster::OBJ(S::OBJ_LAST_STAND), S::NPC_WHITEMANE };
+    EXPECT_EQ(Entries(cath), want);
+    EXPECT_EQ(PickOrder(cath), want);
+    ASSERT_EQ(cath.size(), 3u);
+
+    EXPECT_EQ(cath[0].encounterIndex, S::BIT_THORNE);
+    EXPECT_EQ(cath[0].kind, DungeonAnchorKind::Boss);
+
+    // The Last Stand: an objective on the landing outside the Chapel Door, carrying
+    // event 2, done when slot 5 reads DONE (its credit is a spell, so no bit of its
+    // own completes it; a reload with the stand won skips it).
+    DungeonBossInfo const& stand = cath[1];
+    EXPECT_EQ(stand.kind, DungeonAnchorKind::Objective);
+    EXPECT_EQ(stand.eventId, S::EVENT_LAST_STAND);
+    EXPECT_EQ(stand.doneBossStateIndex, S::SLOT_LAST_STAND);
+    EXPECT_EQ(stand.orderOverride, S::ORDER_LAST_STAND);
+    EXPECT_NEAR(stand.x, S::LANDING_X, 0.01f);
+    EXPECT_EQ(AnchorDoneByInstanceValues(stand, S::STATE_DONE, 0u), DcAnchorDoneVia::BossState);
+    EXPECT_EQ(AnchorDoneByInstanceValues(stand, /*IN_PROGRESS*/ 1u, 0u), DcAnchorDoneVia::None);
+
+    // Whitemane: on her own bit at the vigil on the crossing, not her chamber.
+    DungeonBossInfo const& whitemane = cath[2];
+    EXPECT_EQ(whitemane.entry, S::NPC_WHITEMANE);
+    EXPECT_EQ(whitemane.encounterIndex, S::BIT_WHITEMANE);
+    EXPECT_EQ(whitemane.kind, DungeonAnchorKind::Boss);
+    EXPECT_NEAR(whitemane.x, S::VIGIL_X, 0.01f);
+    EXPECT_NEAR(whitemane.y, S::VIGIL_Y, 0.01f);
+    EXPECT_LT(whitemane.x, 1172.0f) << "west of the High Inquisitor's Door";
+
+    for (DungeonBossInfo const& b : SmRoster())
+    {
+        EXPECT_NE(b.entry, S::NPC_MOGRAINE) << "never pull Mograine";
+        EXPECT_NE(b.entry, S::NPC_FAIRBANKS);
+    }
+}
+
+TEST(DcRunWingTest, CathedralRosterSurvivesAStockFairbanksCredit)
+{
+    // A database whose encounter 449 still credits Fairbanks would derive him on
+    // bit 5: the patch removes him, so the Last Stand objective is the only slot 5
+    // anchor and nobody walks to his room.
+    std::vector<DungeonBossInfo> base = SmSpawnIndex();
+    base.push_back(Boss(S::NPC_FAIRBANKS, S::BIT_LAST_STAND, 1158.86f, 1354.27f, 30.39f, S::MAP_ID));
+    std::vector<DungeonBossInfo> const roster = SmRoster(base);
+    for (DungeonBossInfo const& b : roster)
+        EXPECT_NE(b.entry, S::NPC_FAIRBANKS);
+    std::vector<uint32> const want = { S::NPC_THORNE, DcRoster::OBJ(S::OBJ_LAST_STAND), S::NPC_WHITEMANE };
+    EXPECT_EQ(Entries(SmWing("sm-cath", roster)), want);
+}
+
+TEST(DcRunWingTest, EachScarletSectionEndsOnItsOwnLastBoss)
+{
+    std::vector<DungeonBossInfo> const roster = SmRoster();
+    DungeonWing const& gy = *DungeonWingRegistry::FindWing(Sm(), "sm-gy");
+    DungeonWing const& lib = *DungeonWingRegistry::FindWing(Sm(), "sm-lib");
+    std::vector<DungeonBossInfo> const gyList = DcRunWing::FilterToWing(roster, gy);
+    std::vector<DungeonBossInfo> const libList = DcRunWing::FilterToWing(roster, lib);
+
+    // Thalnos (bit 1) ends section 1; the off-route bosses never do.
+    EXPECT_TRUE(DcRunWing::TerminalDone(gy, gyList, 1u << S::BIT_THALNOS, false));
+    EXPECT_TRUE(DcRunWing::TerminalDone(gy, gyList, 0u, /*terminalCorpse*/ true));
+    EXPECT_FALSE(DcRunWing::TerminalDone(gy, gyList, gy.encounterMask & ~(1u << S::BIT_THALNOS), false));
+    // Doan (bit 3) ends section 2.
+    EXPECT_TRUE(DcRunWing::TerminalDone(lib, libList, 1u << S::BIT_DOAN, false));
+    EXPECT_FALSE(DcRunWing::TerminalDone(lib, libList, lib.encounterMask & ~(1u << S::BIT_DOAN), false));
+    // Herod (bit 4) ends section 3; Whitemane (bit 6) section 4. The Last Stand's
+    // bit 5 and the off-route Thorne never end the Cathedral.
+    DungeonWing const& arm = *DungeonWingRegistry::FindWing(Sm(), "sm-arm");
+    DungeonWing const& cath = *DungeonWingRegistry::FindWing(Sm(), "sm-cath");
+    std::vector<DungeonBossInfo> const armList = DcRunWing::FilterToWing(roster, arm);
+    std::vector<DungeonBossInfo> const cathList = DcRunWing::FilterToWing(roster, cath);
+    EXPECT_TRUE(DcRunWing::TerminalDone(arm, armList, 1u << S::BIT_HEROD, false));
+    EXPECT_TRUE(DcRunWing::TerminalDone(arm, armList, 0u, /*terminalCorpse*/ true));
+    EXPECT_FALSE(DcRunWing::TerminalDone(arm, armList, arm.encounterMask & ~(1u << S::BIT_HEROD), false));
+    EXPECT_TRUE(DcRunWing::TerminalDone(cath, cathList, 1u << S::BIT_WHITEMANE, false));
+    EXPECT_FALSE(DcRunWing::TerminalDone(cath, cathList, cath.encounterMask & ~(1u << S::BIT_WHITEMANE),
+                                         false));
+    EXPECT_FALSE(DcRunWing::TerminalDone(arm, armList, 1u << S::BIT_WHITEMANE, false));
+    EXPECT_FALSE(DcRunWing::TerminalDone(cath, cathList, 1u << S::BIT_HEROD, false));
+    // The other section's end never completes this one.
+    EXPECT_FALSE(DcRunWing::TerminalDone(gy, gyList, 1u << S::BIT_DOAN, false));
+    EXPECT_FALSE(DcRunWing::TerminalDone(lib, libList, 1u << S::BIT_THALNOS, false));
+}
+
+TEST(DcRunWingTest, ScarletMonasteryRegionsNameTheWingThePartyStandsIn)
+{
+    // DcRunWing's fallback (a bare `.dc on`, a section 3/4 Finder group) reads the
+    // map-189 wing regions: every start, boss spot and portal landing is inside its
+    // own wing's box.
+    struct Case
+    {
+        SmSpot spot;
+        char const* wing;
+    };
+    Case const cases[] = {
+        { { 1688.99f, 1053.48f,  18.68f, "Graveyard start (LFG 18)" }, "sm-gy" },
+        { { 1687.57f, 1040.09f,  20.98f, "Graveyard exit trigger" }, "sm-gy" },
+        { { 1786.55f, 1124.44f,   7.57f, "Vishas" }, "sm-gy" },
+        { { 1796.5f,  1285.5f,   18.8f,  "Ironspine's lawn home" }, "sm-gy" },
+        { { 1798.5f,  1348.5f,   18.6f,  "the council's lawn (P1h)" }, "sm-gy" },
+        { { 1820.34f, 1416.71f,  -7.92f, "Thalnos's crypt" }, "sm-gy" },
+        { { 1807.2f,  1417.8f,   -8.9f,  "portal P1" }, "sm-gy" },
+        { {  255.35f, -209.09f,  18.68f, "Library start (LFG 165, P1's landing)" }, "sm-lib" },
+        { {  253.6f,  -196.8f,   21.04f, "Library exit trigger" }, "sm-lib" },
+        { {  119.94f, -260.87f,  18.63f, "Loksey's alcove" }, "sm-lib" },
+        { {  242.8f,  -329.2f,   18.9f,  "Kell" }, "sm-lib" },
+        { {  254.8f,  -389.2f,   20.49f, "Hollis Grey" }, "sm-lib" },
+        { {  148.32f, -428.69f,  18.49f, "Doan" }, "sm-lib" },
+        { {  138.0f,  -429.2f,   18.6f,  "portal P2" }, "sm-lib" },
+        { { 1610.83f, -323.43f,  18.67f, "Armory start (P2's landing)" }, "sm-arm" },
+        { { 1776.0f,  -390.5f,    8.0f,  "Crell's anvil" }, "sm-arm" },
+        { { 1875.0f,  -400.0f,   18.7f,  "Halden" }, "sm-arm" },
+        { { 1965.09f, -431.61f,   6.26f, "Herod" }, "sm-arm" },
+        { { 1955.0f,  -431.8f,    6.4f,  "portal P3" }, "sm-arm" },
+        { {  855.68f, 1321.5f,   18.67f, "Cathedral start (P3's landing)" }, "sm-cath" },
+        { {  908.2f,  1399.2f,   19.0f,  "Thorne" }, "sm-cath" },
+        { { 1062.0f,  1399.1f,   30.85f, "the Last Stand's landing" }, "sm-cath" },
+        { { 1104.8f,  1399.2f,   31.0f,  "the nave hold" }, "sm-cath" },
+        { { 1153.87f, 1398.39f,  32.61f, "Mograine" }, "sm-cath" },
+        { { 1146.0f,  1398.0f,   32.1f,  "Whitemane's vigil" }, "sm-cath" },
+        { { 1202.13f, 1399.07f,  29.09f, "Whitemane's chamber" }, "sm-cath" },
+    };
+    for (Case const& c : cases)
+    {
+        char const* region = DcNavPenaltyRegistry::WingRegionAt(S::MAP_ID, c.spot.x, c.spot.y, c.spot.z);
+        ASSERT_NE(region, nullptr) << c.spot.what;
+        EXPECT_STREQ(region, c.wing) << c.spot.what;
+        EXPECT_EQ(DcRunWing::ResolveFallback(Sm(), region), c.wing) << c.spot.what;
+    }
+
+    // Regions only: they never tax a route nor read as "inside a fence", for a run
+    // in any wing (the wings are disconnected, so there is nothing to fence).
+    for (char const* run : { "sm-gy", "sm-lib", "sm-arm", "sm-cath" })
+        for (Case const& c : cases)
+        {
+            EXPECT_FLOAT_EQ(DcNavPenaltyRegistry::PenaltyAt(S::MAP_ID, c.spot.x, c.spot.y, c.spot.z, run), 1.0f)
+                << run << " at " << c.spot.what;
+            EXPECT_FALSE(DcNavPenaltyRegistry::IsInsideRegion(S::MAP_ID, c.spot.x, c.spot.y, c.spot.z, run))
+                << run << " at " << c.spot.what;
+        }
+    // Outside every wing (no such floor): the default wing.
+    EXPECT_EQ(DcNavPenaltyRegistry::WingRegionAt(S::MAP_ID, 0.0f, 0.0f, 0.0f), nullptr);
+    EXPECT_EQ(DcRunWing::ResolveFallback(Sm(), nullptr), "sm-gy");
 }

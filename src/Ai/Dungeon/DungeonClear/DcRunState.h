@@ -233,6 +233,12 @@ struct DcRunState
     // getMSTime() the all-cleared trigger first held the run end for pending boss
     // loot (0 = not holding). Capped by DcLootPolicy::kFinalLootWaitMs.
     uint32 finalLootHoldSinceMs = 0;
+    // getMSTime() the all-cleared trigger first saw the roster done, for the
+    // final-fight hold that comes before the loot hold (0 = not holding): see
+    // DungeonClearMath::HoldRunEndForFight.
+    uint32 finalFightHoldSinceMs = 0;
+    // The hold has logged its "party fights" line (once it outlived the settle).
+    bool finalFightHoldLogged = false;
 
     // === Blackwing Lair — Razorgore's orb and egg run (leader-owned) =============
     // The one encounter DC orchestrates from INSIDE a raid fight (see
