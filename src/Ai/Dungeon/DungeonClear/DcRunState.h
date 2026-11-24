@@ -23,6 +23,7 @@
 #include "Ai/Dungeon/DungeonClear/Util/DcRunProgress.h"
 #include "Ai/Dungeon/DungeonClear/Util/DcRunWing.h"
 #include "Ai/Dungeon/DungeonClear/Util/DcThrottle.h"
+#include "Ai/Dungeon/DungeonClear/Util/DungeonClearMath.h"
 
 // The authoritative, leader-owned state of one dungeon-clear RUN — the run's
 // identity/mode, its current manual-override objective, and the two cross-bot
@@ -117,6 +118,12 @@ struct DcRunState
     // can't hold the run open. Re-armed to 0 whenever the tank leaves the boss's
     // approach range, so each attempt gets a fresh budget.
     uint32      sealedMusterSince = 0;
+
+    // Pre-boss regroup (dungeons): held by DungeonClearAtBossTrigger until every
+    // bot is near the tank and every healer has LOS to it, bounded and self-staling.
+    // Followers read it on the leader to close in. See
+    // DungeonClearMath::ShouldHoldBossRegroup.
+    DungeonClearMath::BossRegroupLatch bossRegroup;
 
     // === cross-bot leader-fight signals (were the g_* file-static maps) ============
     // Both are keyed, in the old design, by the LEADER's GUID and only ever read/
@@ -233,6 +240,12 @@ struct DcRunState
     // getMSTime() the all-cleared trigger first held the run end for pending boss
     // loot (0 = not holding). Capped by DcLootPolicy::kFinalLootWaitMs.
     uint32 finalLootHoldSinceMs = 0;
+    // getMSTime() the all-cleared trigger first saw the roster done, for the
+    // final-fight hold that comes before the loot hold (0 = not holding): see
+    // DungeonClearMath::HoldRunEndForFight.
+    uint32 finalFightHoldSinceMs = 0;
+    // The hold has logged its "party fights" line (once it outlived the settle).
+    bool finalFightHoldLogged = false;
 
     // === Blackwing Lair — Razorgore's orb and egg run (leader-owned) =============
     // The one encounter DC orchestrates from INSIDE a raid fight (see

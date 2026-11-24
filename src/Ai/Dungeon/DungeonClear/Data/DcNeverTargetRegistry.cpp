@@ -376,6 +376,31 @@ namespace
         // is the cheap insurance that the stadium hold never sends the tank up a
         // wall at him. Rend beside him stays a target: he is the bit-11 kill.
         { 229, 10162 },  // Upper Blackrock Spire — Lord Victor Nefarius (balcony, unreachable)
+
+        // --- Scarlet Monastery (189): Scarlet Commander Mograine --------------
+        //
+        // Classes 1 and 2 at once (the rework's Last Stand, STAGE-D13). Mograine
+        // (3976) waits passive and attackable on the altar steps, 49yd up the
+        // nave from where the Last Stand event holds the party, while his three
+        // companies march in; after the third he comes down and fights the group
+        // himself, and his damage clamps at 1% until he falls (no kill, ever:
+        // the instance credits the stand). A clear that went looking for him
+        // would pull him early and fight a target that cannot die in the
+        // window. Once fallen he is not selectable, and when he rises in
+        // Whitemane's fight the descriptor and the combat engine own him. He is
+        // fought wherever he engages; this row only stops the clear's pickers.
+        { 189, 3976 },   // Scarlet Monastery — Scarlet Commander Mograine (the Last Stand)
+
+        // --- Scarlet Monastery (189): the stock High Inquisitor Fairbanks -----
+        //
+        // Class 2, hard mode staging. In the rework the Last Stand carries the
+        // Cathedral's encounter 449, so the stock Fairbanks (4542) is no
+        // encounter at all: he waits in his room behind the Secret Door (shut;
+        // the Torch opens it), and on heroic the Torch despawns him for the vigil
+        // Fairbanks of Whitemane's hard mode (D14H, a human's choice). The clear
+        // must never path to that room (D14H's contract). BOXED to the room
+        // (x 1148-1169, y 1334-1362 with margin).
+        { 189, 4542, 1146.0f, 1171.0f, 1332.0f, 1364.0f },  // Scarlet Monastery — Fairbanks, his room only
     };
 }
 

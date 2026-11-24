@@ -272,6 +272,34 @@ namespace DcCombatFlag
         return scan.found && scan.nearestDist <= radius;
     }
 
+    namespace
+    {
+        // Party members on the bot's map, the bot left out, in group order.
+        std::vector<Player*> MapMembers(Player* bot)
+        {
+            std::vector<Player*> out;
+            Group* group = bot->GetGroup();
+            if (!group)
+                return out;
+            for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+            {
+                Player* member = ref->GetSource();
+                if (!member || member == bot || member->GetMapId() != bot->GetMapId())
+                    continue;
+                out.push_back(member);
+            }
+            return out;
+        }
+
+        bool PartyHeldScan(Player* bot, float radius, int maxScans)
+        {
+            if (IsHeldByLiveEnemy(bot, radius))
+                return true;
+            return DungeonClearMath::ScanPartyForHolder(
+                MapMembers(bot), [radius](Player* member) { return IsHeldByLiveEnemy(member, radius); }, maxScans);
+        }
+    }
+
     bool AnyPartyHeldByLiveEnemy(Player* bot, float radius)
     {
         if (!bot)
@@ -285,40 +313,33 @@ namespace DcCombatFlag
         if (memo && memo->partyHeldByLiveEnemy >= 0 && memo->partyHeldRadius == radius)
             return memo->partyHeldByLiveEnemy == 1;
 
-        auto const compute = [&]()
-        {
-            if (IsHeldByLiveEnemy(bot, radius))
-                return true;
-            Group* group = bot->GetGroup();
-            if (!group)
-                return false;
-            // Cap the per-tick cost at raid scale: past this many members
-            // scanned without finding a holder, answer TRUE — the conservative
-            // direction for every caller (the rez release and the phantom
-            // hatch both treat "held" as "do not act yet"), and 12 members is
-            // already far beyond what a real all-clear needs to prove in one
-            // tick; the next tick re-asks with a fresh memo.
-            constexpr int kMaxMemberScans = 12;
-            int scanned = 0;
-            for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
-            {
-                Player* member = ref->GetSource();
-                if (!member || member == bot || member->GetMapId() != bot->GetMapId())
-                    continue;
-                if (++scanned > kMaxMemberScans)
-                    return true;
-                if (IsHeldByLiveEnemy(member, radius))
-                    return true;
-            }
-            return false;
-        };
-        bool const held = compute();
+        // Cap the per-tick cost at raid scale: past this many members scanned
+        // without finding a holder, answer TRUE — the conservative direction
+        // for the per-tick callers (the rez release and the phantom hatch both
+        // treat "held" as "do not act yet"), and 12 members is already far
+        // beyond what a real all-clear needs to prove in one tick; the next
+        // tick re-asks with a fresh memo. The run end, which reads "held" the
+        // other way, uses AnyPartyMemberHeldByLiveEnemy instead.
+        constexpr int kMaxMemberScans = 12;
+        bool const held = PartyHeldScan(bot, radius, kMaxMemberScans);
         if (memo)
         {
             memo->partyHeldByLiveEnemy = held ? 1 : 0;
             memo->partyHeldRadius = radius;
         }
         return held;
+    }
+
+    bool AnyPartyMemberHeldByLiveEnemy(Player* bot, float radius)
+    {
+        if (!bot)
+            return false;
+        // A capped-scan "not held" from this tick's memo is exact (the cap only
+        // errs toward held); anything else is re-scanned over every member.
+        DcTickMemo* const memo = MemoFor(bot);
+        if (memo && memo->partyHeldByLiveEnemy == 0 && memo->partyHeldRadius == radius)
+            return false;
+        return PartyHeldScan(bot, radius, 0);
     }
 
     bool MayDrive(Player* bot, AiObjectContext* context)

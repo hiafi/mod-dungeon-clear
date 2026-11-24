@@ -209,3 +209,23 @@ TEST(DcNeverTargetRegistryTest, BlackrockDepthsReservistsAreNeverATargetInTheLyc
     // A whole-map row still matches through the positional overload.
     EXPECT_TRUE(DcNeverTargetRegistry::IsNeverTarget(230, 9545, 0.0f, 0.0f));
 }
+
+// --- Scarlet Monastery (189) — the Last Stand's Mograine and the stock Fairbanks --
+//
+// Mograine waits passive on the altar steps while the Last Stand's companies march
+// in and clamps at 1% until he falls (STAGE-D13): never a clear target, map-wide.
+// The stock Fairbanks waits in his room behind the Secret Door for Whitemane's
+// hard mode (D14H): never a target in that room.
+TEST(DcNeverTargetRegistryTest, ScarletMonasteryNeverGoesLookingForMograineOrFairbanks)
+{
+    EXPECT_TRUE(DcNeverTargetRegistry::IsNeverTarget(189, 3976));
+    EXPECT_TRUE(DcNeverTargetRegistry::IsNeverTarget(189, 3976, 1153.87f, 1398.39f));   // the altar steps
+    EXPECT_TRUE(DcNeverTargetRegistry::IsNeverTarget(189, 4542, 1158.86f, 1354.27f));   // his spawn
+    EXPECT_FALSE(DcNeverTargetRegistry::IsNeverTarget(189, 4542));
+    EXPECT_FALSE(DcNeverTargetRegistry::IsNeverTarget(189, 4542, 1140.0f, 1398.0f));    // the crossing
+
+    // Whitemane, Herod and the vigil Fairbanks of the hard mode stay targets.
+    EXPECT_FALSE(DcNeverTargetRegistry::IsNeverTarget(189, 3977));
+    EXPECT_FALSE(DcNeverTargetRegistry::IsNeverTarget(189, 3975));
+    EXPECT_FALSE(DcNeverTargetRegistry::IsNeverTarget(189, 300956));
+}

@@ -177,6 +177,18 @@ namespace DcBossStandDown
             : std::vector<DungeonBossInfo>{};
         std::vector<DungeonBossInfo> const* const roster = ownerAI ? &rosterRows : nullptr;
 
+        // A boss-less encounter the run is standing in (the SM Last Stand): its
+        // objective's slot reads IN_PROGRESS, whoever holds whom.
+        if (InstanceScript const* const script = DcTargeting::GetInstanceScript(bot))
+            for (DungeonBossInfo const& info : rosterRows)
+            {
+                if (info.doneBossStateIndex < 0)
+                    continue;
+                uint32 const state = uint32(script->GetBossState(uint32(info.doneBossStateIndex)));
+                if (ObjectiveEncounterLive(info.kind == DungeonAnchorKind::Objective, info.doneBossStateIndex, state))
+                    return true;
+            }
+
         // The holder's victim, as the player it belongs to (a pet's owner): a
         // member of the party, and not the bot asking.
         auto const victimIsOtherMember = [&](Unit* victim)

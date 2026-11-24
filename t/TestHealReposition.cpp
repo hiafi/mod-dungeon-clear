@@ -308,3 +308,27 @@ TEST(DungeonClearFiveManBossFightTest, EveryOtherShapeLetsTheBreakerRun)
     EXPECT_FALSE(HoldsFiveManBossFight(true, true, true, true, true));
     EXPECT_FALSE(HoldsFiveManBossFight(true, true, true, false, false));
 }
+
+// ---- The breaker gate's objective shape (SM Last Stand, R-2-FW MJ-1) ----------
+
+using DcBossStandDown::ObjectiveEncounterLive;
+
+// An objective whose boss-state slot reads IN_PROGRESS is a live encounter: the
+// breaker must not clear a healer's combat while the waves run.
+TEST(DungeonClearFiveManBossFightTest, ObjectiveSlotInProgressHolds)
+{
+    EXPECT_TRUE(ObjectiveEncounterLive(true, 5, 1));  // the Last Stand: slot 5 IN_PROGRESS
+    EXPECT_TRUE(ObjectiveEncounterLive(true, 0, DcBossStandDown::kEncounterInProgress));
+}
+
+// Before the start, after the end, after a wipe, with no slot, or on a BOSS row
+// (bosses answer through the holder walk), the breaker keeps its normal rule.
+TEST(DungeonClearFiveManBossFightTest, ObjectiveOtherwiseLetsTheBreakerRun)
+{
+    EXPECT_FALSE(ObjectiveEncounterLive(true, 5, 0));   // NOT_STARTED
+    EXPECT_FALSE(ObjectiveEncounterLive(true, 5, 2));   // FAIL
+    EXPECT_FALSE(ObjectiveEncounterLive(true, 5, 3));   // DONE
+    EXPECT_FALSE(ObjectiveEncounterLive(true, 5, 4));   // SPECIAL
+    EXPECT_FALSE(ObjectiveEncounterLive(true, -1, 1));  // no slot authored
+    EXPECT_FALSE(ObjectiveEncounterLive(false, 5, 1));  // a Boss row
+}

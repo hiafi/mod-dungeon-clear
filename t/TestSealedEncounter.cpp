@@ -9,6 +9,7 @@
 
 #include "Ai/Dungeon/DungeonClear/Data/FightInPlaceRegistry.h"
 #include "Ai/Dungeon/DungeonClear/Data/SealedEncounterRegistry.h"
+#include "Ai/Dungeon/DungeonClear/Data/Events/DungeonEventTables.h"
 
 // A SEALED ENCOUNTER is one whose room locks on encounter start — an InstanceScript
 // DOOR_TYPE_ROOM door, held `open &= (state != IN_PROGRESS)` for the whole fight.
@@ -270,4 +271,99 @@ TEST(DcSealedEncounterTest, ScholomanceBoxesDoNotOverlapInOneFloor)
             bool const zOverlap = ra->minZ < rb->maxZ && rb->minZ < ra->maxZ;
             EXPECT_FALSE(xyOverlap && zOverlap) << a << " vs " << b;
         }
+}
+
+// Scarlet Monastery (map 189), the rework: Arcanist Doan's chamber. The Chamber
+// Seal (GO 301319) rises in the doorway 3 s after his pull and drops on his death
+// or a wipe; the chamber is x 129-167, the doorway a 2yd single-file gap at about
+// x 167-171 (NAVMESH-REPORT, the Athenaeum map). Doan is the only sealed fight of
+// the wave 1 wings.
+TEST(DcSealedEncounterTest, ScarletMonasteryDoanSealsHisChamberNotTheDoorway)
+{
+    uint32 constexpr SM = 189;
+    SealedEncounterRow const* row = SealedEncounterRegistry::Find(SM, 6487);
+    ASSERT_NE(row, nullptr);
+
+    // Inside: his spawn, the three anchors, the portal spot P2 (138.0, -429.2,
+    // 18.6: F-1a moved it 10yd off his spawn), the Strongbox corner.
+    EXPECT_TRUE(SealedEncounterRegistry::InSealedRoom(*row, 148.32f, -428.69f, 18.49f));
+    EXPECT_TRUE(SealedEncounterRegistry::InSealedRoom(*row, 148.3f, -413.7f, 18.5f));
+    EXPECT_TRUE(SealedEncounterRegistry::InSealedRoom(*row, 135.3f, -436.2f, 18.5f));
+    EXPECT_TRUE(SealedEncounterRegistry::InSealedRoom(*row, 161.3f, -436.2f, 18.5f));
+    EXPECT_TRUE(SealedEncounterRegistry::InSealedRoom(*row, 138.0f, -429.2f, 18.6f));
+    EXPECT_TRUE(SealedEncounterRegistry::InSealedRoom(*row, 131.8f, -432.6f, 18.5f));
+    // His patrol (path 401240) stays inside.
+    EXPECT_TRUE(SealedEncounterRegistry::InSealedRoom(*row, 142.1f, -413.5f, 18.5f));
+    EXPECT_TRUE(SealedEncounterRegistry::InSealedRoom(*row, 147.2f, -442.8f, 18.5f));
+
+    // D8's two numbers the box depends on (R-1-LIB n6): the straggler entry spot
+    // the seal-close pulls players to is inside (1yd of slack to maxX 166), the
+    // seal itself is outside.
+    EXPECT_TRUE(SealedEncounterRegistry::InSealedRoom(*row, 165.0f, -429.3f, 18.5f));
+    EXPECT_FALSE(SealedEncounterRegistry::InSealedRoom(*row, 170.3f, -429.3f, 18.55f));
+
+    // Outside: the doorway, the outer hall's door monk, the hall's far end.
+    EXPECT_FALSE(SealedEncounterRegistry::InSealedRoom(*row, 169.0f, -432.0f, 18.6f));
+    EXPECT_FALSE(SealedEncounterRegistry::InSealedRoom(*row, 173.98f, -430.87f, 18.6f));
+    EXPECT_FALSE(SealedEncounterRegistry::InSealedRoom(*row, 200.0f, -428.0f, 18.9f));
+
+    // The clump arms in the outer hall, before the doorway, and not in the passage
+    // beyond it (x 207-212) or anywhere back toward Hollis Grey.
+    float const bx = 148.32f;
+    float const by = -428.69f;
+    float const bz = 18.49f;
+    EXPECT_TRUE(SealedEncounterRegistry::InApproachRange(*row, 169.0f, -432.0f, 18.6f, bx, by, bz));
+    EXPECT_TRUE(SealedEncounterRegistry::InApproachRange(*row, 180.0f, -430.0f, 18.9f, bx, by, bz));
+    EXPECT_FALSE(SealedEncounterRegistry::InApproachRange(*row, 209.0f, -430.0f, 18.9f, bx, by, bz));
+    EXPECT_FALSE(SealedEncounterRegistry::InApproachRange(*row, 254.8f, -389.2f, 20.5f, bx, by, bz));
+
+    // The rest of the Graveyard and the Library fight in the open.
+    for (uint32 open : { 3983u, 6489u, 6488u, 6490u, 4543u, 3974u, 300910u, 300913u })
+        EXPECT_EQ(SealedEncounterRegistry::Find(SM, open), nullptr) << open;
+}
+
+// Scarlet Monastery, wave 2: Herod's hall. His SealedArena shuts Herod's Door
+// (1933.69, -431.65, 18.67) 3 s after the pull (D11); the hall behind it is the
+// door spur (z 15.5-18.2), the ledge ring and the pit round (1961.9, -431.6)
+// (NAVMESH maps3). Herod is the only sealed fight of the wave 2 wings.
+TEST(DcSealedEncounterTest, ScarletMonasteryHerodSealsHisHallNotTheCrossHall)
+{
+    namespace S = DcScarletMonastery;
+    SealedEncounterRow const* row = SealedEncounterRegistry::Find(S::MAP_ID, S::NPC_HEROD);
+    ASSERT_NE(row, nullptr);
+
+    // Inside: his spawn, the pit center and the portal spot P3 (1955.0, -431.8,
+    // 6.4: F-1a moved it 10yd off his spawn), the Lever on the spur, the spur's
+    // apron, the ledge ring at its widest (r 25.5), north and south.
+    EXPECT_TRUE(SealedEncounterRegistry::InSealedRoom(*row, S::HEROD_X, S::HEROD_Y, S::HEROD_Z));
+    EXPECT_TRUE(SealedEncounterRegistry::InSealedRoom(*row, 1961.9f, -431.6f, 6.6f));
+    EXPECT_TRUE(SealedEncounterRegistry::InSealedRoom(*row, 1955.0f, -431.8f, 6.4f));
+    EXPECT_TRUE(SealedEncounterRegistry::InSealedRoom(*row, 1939.48f, -428.0f, 17.08f));
+    EXPECT_TRUE(SealedEncounterRegistry::InSealedRoom(*row, 1950.0f, -431.6f, 16.5f));
+    EXPECT_TRUE(SealedEncounterRegistry::InSealedRoom(*row, 1961.9f, -406.1f, 12.0f));
+    EXPECT_TRUE(SealedEncounterRegistry::InSealedRoom(*row, 1961.9f, -457.1f, 12.0f));
+    EXPECT_TRUE(SealedEncounterRegistry::InSealedRoom(*row, 1987.4f, -431.6f, 12.0f));
+
+    // Outside: the door and its sill, the cross hall's trash at the door
+    // (Myrmidon 89086, Defender 89084, Guardsman 89083).
+    EXPECT_FALSE(SealedEncounterRegistry::InSealedRoom(*row, S::HERODS_DOOR_X, S::HERODS_DOOR_Y,
+                                                       S::HERODS_DOOR_Z));
+    EXPECT_FALSE(SealedEncounterRegistry::InSealedRoom(*row, 1935.0f, -431.6f, 18.4f));
+    EXPECT_FALSE(SealedEncounterRegistry::InSealedRoom(*row, 1927.7f, -437.2f, 18.1f));
+    EXPECT_FALSE(SealedEncounterRegistry::InSealedRoom(*row, 1927.1f, -440.3f, 18.1f));
+    EXPECT_FALSE(SealedEncounterRegistry::InSealedRoom(*row, 1924.1f, -438.2f, 18.1f));
+
+    // The clump arms in the cross hall about 10yd west of the door, before the
+    // party threads it, and not back at Halden's chamber.
+    EXPECT_TRUE(SealedEncounterRegistry::InApproachRange(*row, S::HERODS_DOOR_X, S::HERODS_DOOR_Y,
+                                                         S::HERODS_DOOR_Z, S::HEROD_X, S::HEROD_Y, S::HEROD_Z));
+    EXPECT_TRUE(SealedEncounterRegistry::InApproachRange(*row, 1924.0f, -431.6f, 18.2f, S::HEROD_X,
+                                                         S::HEROD_Y, S::HEROD_Z));
+    EXPECT_FALSE(SealedEncounterRegistry::InApproachRange(*row, 1875.0f, -400.0f, 18.7f, S::HEROD_X,
+                                                          S::HEROD_Y, S::HEROD_Z));
+
+    // The other wave 2 encounters fight in the open (the Last Stand is an
+    // objective; nothing seals the nave or the vigil).
+    for (uint32 open : { S::NPC_CRELL, S::NPC_HALDEN, S::NPC_THORNE, S::NPC_MOGRAINE, S::NPC_WHITEMANE })
+        EXPECT_EQ(SealedEncounterRegistry::Find(S::MAP_ID, open), nullptr) << open;
 }

@@ -403,6 +403,40 @@ namespace DcEventDoorRegistry
             // auto-pauses the run at the portal instead.
             case 21117:   // Blackfathom Deeps — Portal of Aku'mai (opens on the last wave's death)
                 return true;
+            // Scarlet Monastery (map 189), the rework — Doan's Chamber Seal
+            // (301319): an arcane barrier boss_arcanist_doan_rework raises in the
+            // chamber doorway 3 s after his pull (KT-SM SealedArena) and drops on
+            // his death or a wipe; the arena re-shuts it if anything opens it
+            // while sealed. The Sjonnir's Door shape: the party is mustered INSIDE
+            // before the pull (SealedEncounterRegistry), so nothing ever needs to
+            // path through it, and a bot click could only fight the script for its
+            // state. NOT navigation-ignored, for the reason the Halls of Reflection
+            // rows give: a run that pauses at it has regressed somewhere else.
+            // (STAGE-D8 asked for a navigation-ignore like the Chapel Door
+            // cluster; declined at F-1: a seal the party is mustered behind is
+            // IsScriptOnly only.)
+            //
+            // Herod's Door (101854) is the other sealed room, but NOT listed:
+            // unlike the Chamber Seal it is the hall's real door, shut when the
+            // party arrives, and opening it is the party's job (keyless in the
+            // rework, IsKeyExempt below for a database that still keys it). His
+            // SealedArena shuts it 3 s after the pull with everyone mustered
+            // inside (SealedEncounterRegistry) and the instance reopens it on his
+            // death or a wipe; nothing on the route needs it during the fight.
+            //
+            // Two Cathedral doors the instance owns (wave 2):
+            //   * the High Inquisitor's Door (104600, lock 85, no LOCKED flag):
+            //     the instance opens it when the Last Stand is DONE and Whitemane
+            //     walks out to her vigil; a bot click before that would open her
+            //     chamber early and fight the script for the state. The route to
+            //     her vigil never crosses it.
+            //   * the Secret Door (97700) to the stock Fairbanks's room: the Torch
+            //     opens it, the trigger of Whitemane's hard mode (D14H), a human's
+            //     choice; DC never goes near the room (DcNeverTargetRegistry).
+            case 301319:  // Scarlet Monastery — Doan's Chamber Seal (D8)
+            case 104600:  // Scarlet Monastery — High Inquisitor's Door (the Last Stand's end)
+            case 97700:   // Scarlet Monastery — Secret Door (the Torch, D14H)
+                return true;
             default:
                 return false;
         }
@@ -431,6 +465,22 @@ namespace DcEventDoorRegistry
             // to The Vault." until the harness timed it out (smoke run
             // 2026-11-19, STAGE-SMOKE2-DIAG).
             case 174565:  // Blackrock Depths — the Dark Coffer
+                return true;
+            // Scarlet Monastery — the Chapel Door (104591), the same shape as the
+            // Dark Coffer: a door-type GO whose use STARTS an encounter. The
+            // rework makes it keyless and binds go_sm_chapel_door, so a click
+            // puts the Last Stand IN_PROGRESS and calls the first company; only
+            // the Last Stand event (ScarletMonasteryEvents, event 2) may open
+            // it, after the landing's door Centurions are dead and with the
+            // party on the tank. Left to the generic rung, the walk-in would
+            // open it mid-pack and the door would own a stall reason through
+            // the whole stand (the harness watchdog, LESSONS 2.4). The cluster
+            // is ignored whole: the Lever (104589, a button 4yd inside that
+            // opens the same door) with it. No other door GO stands within 30yd
+            // of the landing objective (the High Inquisitor's Door is 111yd east,
+            // across the nave).
+            case 104591:  // Scarlet Monastery — Chapel Door (starts the Last Stand)
+            case 104589:  // Scarlet Monastery — the Chapel Door's Lever
                 return true;
             // Blackrock Depths — the Black Vault's other shut door GOs. With the
             // Dark Coffer ignored, the blocking-door value flagged the next shut
@@ -1061,11 +1111,15 @@ namespace DcEventDoorRegistry
     // both sit on lock 299 — Scarlet Key (7146) or lockpicking 175. A tank bot
     // carries neither, so an autonomous SM run parked at the wing entrance and
     // auto-paused every time, making those two wings unclearable without a
-    // human handing the key over first. The doors are otherwise ordinary
-    // traversal gates: no ScriptName, no AIName, no instance-script GO-state
-    // control, and nothing behind them the key is meant to gate beyond the
-    // wing itself (the key is a convenience item players farm from the
-    // Graveyard/Library side, not an encounter lock).
+    // human handing the key over first. On the stock server the doors are
+    // ordinary traversal gates (no ScriptName, no AIName, no instance-script
+    // GO-state control; the key is a convenience item players farm from the
+    // Graveyard/Library side, not an encounter lock). The rework makes both
+    // keyless (it clears GO_FLAG_LOCKED on create), so the waiver only matters
+    // on a database that still keys them, and it changes their roles: the
+    // instance shuts Herod's Door while he fights (still a door the party opens
+    // on the way in), and the Chapel Door starts the Last Stand, so navigation
+    // ignores it (IsNavigationIgnored) and only its event opens it.
     //
     // Keyed by GO ENTRY, not by lock id, for the same reason as the lists
     // above: a lock id is shared across dungeons (299 covers both the SM wing

@@ -135,6 +135,71 @@ namespace
         // one tick and each does a full party walk. See DcTickMemo.
         return DcTickMemoAccess::BetweenPullsReady(bot, context, /*requireNoLoot*/ true);
     }
+
+    // Pre-boss regroup (dungeons). The between-pulls gate only asks for
+    // PartyMaxSpread from the tank, and dynamic pull mode parks the party
+    // PullDynamicPartyLag behind it, so the engage walked in with the healer
+    // ~25yd back and around a corner (Loksey, tr-20261123-214436-1). Hold the
+    // engage until every bot is within DC_BOSS_REGROUP_RANGE of the tank and
+    // every bot healer also sees it. Followers stand their lag / camp hold down
+    // while this holds (DcLeaderSignal), so it is normally met in a second or two.
+    // Bounded and released once per attempt: see ShouldHoldBossRegroup.
+    bool BossRegroupHolds(Player* bot, AiObjectContext* context, DungeonBossInfo const& next)
+    {
+        Creature* const boss = DcTargeting::GetLiveBoss(bot, context, next.entry);
+        bool const bossInCombat = boss && boss->IsInCombat();
+
+        Player* straggler = nullptr;
+        bool noLos = false;
+        if (!bossInCombat)
+        {
+            if (Group* group = bot->GetGroup())
+            {
+                for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+                {
+                    Player* member = ref->GetSource();
+                    if (!member || member == bot || member->isDead() ||
+                        member->GetMapId() != bot->GetMapId() || !GET_PLAYERBOT_AI(member))
+                        continue;   // a real player is never gated on
+                    if (bot->GetDistance(member) > DC_BOSS_REGROUP_RANGE)
+                    {
+                        straggler = member;
+                        break;
+                    }
+                    if (PlayerbotAI::IsHeal(member) && !member->IsWithinLOSInMap(bot))
+                    {
+                        straggler = member;
+                        noLos = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        DungeonClearMath::BossRegroupLatch& latch = DcRun::Of(context).bossRegroup;
+        bool const wasHolding = latch.sinceMs != 0 && !latch.released &&
+                                latch.entry == next.entry;
+        uint32 const now = getMSTime();
+        bool const hold = DungeonClearMath::ShouldHoldBossRegroup(
+            bossInCombat, straggler == nullptr, next.entry, now, DC_BOSS_REGROUP_TIMEOUT_MS,
+            DC_BOSS_REGROUP_STALE_MS, latch);
+
+        // Edges only: arm, release, timeout.
+        if (hold && latch.sinceMs == (now != 0 ? now : 1u))
+            LOG_INFO("playerbots.dungeonclear",
+                     "[DC:{}] boss regroup: holding the {} engage — {} is {:.1f}yd away{}",
+                     bot->GetName(), next.name, straggler ? straggler->GetName() : "?",
+                     straggler ? bot->GetDistance(straggler) : 0.0f,
+                     noLos ? " with no line of sight" : "");
+        else if (!hold && wasHolding && latch.released)
+            LOG_INFO("playerbots.dungeonclear",
+                     "[DC:{}] boss regroup: {} after {} ms{}", bot->GetName(),
+                     straggler ? "timed out" : (bossInCombat ? "boss already fighting" : "party set"),
+                     now - latch.sinceMs,
+                     straggler ? (" — engaging anyway, " + straggler->GetName() + " not in") :
+                                 std::string());
+        return hold;
+    }
 }
 
 bool DungeonClearIdleTrigger::IsActive()
@@ -482,7 +547,13 @@ bool DungeonClearAtBossTrigger::IsActive()
 
     // Don't pull while party is still recovering or tank-side loot is pending.
     // The idle-trigger's advance action holds the tank in place meanwhile.
-    return IsBetweenPullsReady(bot, context);
+    if (!IsBetweenPullsReady(bot, context))
+        return false;
+
+    // Rested; now regrouped: every bot close and the healer in sight of the tank.
+    // After the rest gate so the followers only close in once they are done
+    // eating and drinking, and so the regroup budget counts the regroup alone.
+    return !BossRegroupHolds(bot, context, *next);
 }
 
 bool DungeonClearAtObjectiveTrigger::IsActive()
@@ -938,7 +1009,44 @@ bool DungeonClearAllClearedTrigger::IsActive()
     if (ownerCtx->GetValue<std::optional<DungeonBossInfo>>(DcKey::NextDungeonBoss)->Get().has_value())
     {
         rs.finalLootHoldSinceMs = 0;
+        rs.finalFightHoldSinceMs = 0;
+        rs.finalFightHoldLogged = false;
         return false;
+    }
+
+    // The last boss is down, but the fight may not be (Herod's death summons
+    // twenty trainees onto the party). Finish it with the run still on, so a wipe
+    // to the adds reads as a wipe, not a clear. Capped; see HoldRunEndForFight.
+    {
+        uint32 const now = getMSTime();
+        bool const armed = rs.finalFightHoldSinceMs != 0;
+        // Every member, not the 12-member capped read: past its cap that one
+        // answers "held", which here would hold every raid run to the cap.
+        bool const fighting = DcCombatFlag::AnyPartyMemberHeldByLiveEnemy(bot, DC_FIGHT_HOLDER_RADIUS);
+        if (DungeonClearMath::HoldRunEndForFight(fighting, now, DC_FINAL_FIGHT_SETTLE_MS, DC_FINAL_FIGHT_CAP_MS,
+                                                 rs.finalFightHoldSinceMs))
+        {
+            // One line per run end: the settle at the arm (every dungeon), and
+            // the fight line only when the hold outlives the settle.
+            if (!armed)
+                LOG_INFO("playerbots.dungeonclear",
+                         "[DC:{}] all cleared: settling {}s before ending the run{}",
+                         bot->GetName(), DC_FINAL_FIGHT_SETTLE_MS / IN_MILLISECONDS,
+                         fighting ? " (party in a fight)" : "");
+            else if (!rs.finalFightHoldLogged &&
+                     getMSTimeDiff(rs.finalFightHoldSinceMs, now) >= DC_FINAL_FIGHT_SETTLE_MS)
+            {
+                rs.finalFightHoldLogged = true;
+                LOG_INFO("playerbots.dungeonclear",
+                         "[DC:{}] all cleared: holding run end while the party fights (up to {}s)",
+                         bot->GetName(), DC_FINAL_FIGHT_CAP_MS / IN_MILLISECONDS);
+            }
+            return false;
+        }
+        if (fighting && !rs.finalLootHoldSinceMs)  // once: the loot hold below arms on its first tick
+            LOG_INFO("playerbots.dungeonclear",
+                     "[DC:{}] all cleared: party still fighting after {}s -> ending run anyway",
+                     bot->GetName(), DC_FINAL_FIGHT_CAP_MS / IN_MILLISECONDS);
     }
 
     // Everything is down — but the last boss's drop may not have been rolled yet.

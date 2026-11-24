@@ -37,7 +37,7 @@ namespace
 
 TEST(BossRosterRegistryTest, HasPatchOnlyForPatchedMaps)
 {
-    EXPECT_TRUE(BossRosterRegistry::HasPatch(189));   // SM Cathedral
+    EXPECT_TRUE(BossRosterRegistry::HasPatch(189));   // Scarlet Monastery
     EXPECT_TRUE(BossRosterRegistry::HasPatch(109));   // Sunken Temple
     EXPECT_TRUE(BossRosterRegistry::HasPatch(209));   // ZulFarrak
     EXPECT_TRUE(BossRosterRegistry::HasPatch(230));   // Blackrock Depths
@@ -832,57 +832,48 @@ TEST(BossRosterRegistryTest, UnpatchedMapReturnsBaseUnchanged)
     EXPECT_EQ(out[1].entry, 1002u);
 }
 
-// --- Apply: SM Cathedral patch (the shipped worked example) ---------------
+// --- Apply: SM Cathedral patch (the rework's Last Stand) -----------------
 
-TEST(BossRosterRegistryTest, SmCathedralSwapsWhitemaneForMograine)
+TEST(BossRosterRegistryTest, SmCathedralAnchorsTheLastStandAndWhitemanesVigil)
 {
-    // The auto-derived Cathedral list as BossSpawnIndex emits it: Fairbanks
-    // (idx 4) and Whitemane (idx 5). Plus a non-Cathedral SM boss to prove the
-    // patch only touches the entries it names.
+    // The auto-derived Cathedral list as BossSpawnIndex emits it on a database
+    // that still credits encounter 449 to Fairbanks: Fairbanks (idx 5) and
+    // Whitemane (idx 6) in her chamber, plus the Armory's Herod to prove the patch
+    // only touches the entries it names.
     std::vector<DungeonBossInfo> base = {
-        Boss(3975, 2, "Herod", 189),               // Armory — untouched
-        Boss(4542, 4, "High Inquisitor Fairbanks", 189),
-        Boss(3977, 5, "High Inquisitor Whitemane", 189),
+        Boss(3975, 4, "Herod", 189),               // Armory — untouched
+        Boss(4542, 5, "High Inquisitor Fairbanks", 189),
+        Boss(3977, 6, "High Inquisitor Whitemane", 189),
     };
 
     std::vector<DungeonBossInfo> out = BossRosterRegistry::Apply(189, DcDiffKey::Dungeon(DUNGEON_DIFFICULTY_NORMAL), base);
 
-    // Whitemane removed.
-    EXPECT_EQ(Find(out, 3977), nullptr);
+    // Fairbanks gone, Mograine never injected (D13: never pull him).
+    EXPECT_EQ(Find(out, 4542), nullptr);
+    EXPECT_EQ(Find(out, 3976), nullptr);
 
-    // Mograine injected as a real Boss anchor with coords.
-    DungeonBossInfo const* mograine = Find(out, 3976);
-    ASSERT_NE(mograine, nullptr);
-    EXPECT_EQ(mograine->kind, DungeonAnchorKind::Boss);
-    EXPECT_GT(mograine->x, 1100.0f);
-    EXPECT_LT(mograine->x, 1200.0f);
+    // Whitemane re-anchored at her vigil on the crossing, on her own bit 6.
+    DungeonBossInfo const* whitemane = Find(out, 3977);
+    ASSERT_NE(whitemane, nullptr);
+    EXPECT_EQ(whitemane->kind, DungeonAnchorKind::Boss);
+    EXPECT_EQ(whitemane->encounterIndex, 6u);
+    EXPECT_NEAR(whitemane->x, 1146.0f, 0.01f);
+    EXPECT_NEAR(whitemane->y, 1398.0f, 0.01f);
 
-    // He BORROWS Whitemane's encounter index (kill-bit) via inheritCompletionFrom,
-    // and the authoring field is consumed (cleared) by Apply.
-    EXPECT_EQ(mograine->encounterIndex, 5u);
-    EXPECT_EQ(mograine->inheritCompletionFrom, 0u);
+    // The Last Stand: an objective carrying event 2, done on slot 5 DONE, ahead of
+    // Whitemane in the clear order.
+    DungeonBossInfo const* stand = Find(out, BossRosterRegistry::ObjectiveEntry(1));
+    ASSERT_NE(stand, nullptr);
+    EXPECT_EQ(stand->kind, DungeonAnchorKind::Objective);
+    EXPECT_EQ(stand->eventId, 2u);
+    EXPECT_EQ(stand->doneBossStateIndex, 5);
+    EXPECT_LT(BossOrderKey(*stand), BossOrderKey(*whitemane));
+    ASSERT_NE(DungeonEventRegistry::Find(189, stand->eventId), nullptr);
 
-    // ORDER FIX: room-clear + Mograine run BEFORE Fairbanks. Mograine carries
-    // orderOverride 3 (< Fairbanks's bit 4) so the picker reaches him first,
-    // while his completion still keys on Whitemane's real bit 5.
-    EXPECT_EQ(mograine->orderOverride, 3);
-    EXPECT_EQ(BossOrderKey(*mograine), 3u);
-
-    DungeonBossInfo const* fairbanks = Find(out, 4542);
-    ASSERT_NE(fairbanks, nullptr);
-    // Result is ordered by BossOrderKey, so Mograine precedes Fairbanks.
-    auto pos = [&](uint32 entry)
-    {
-        for (size_t i = 0; i < out.size(); ++i)
-            if (out[i].entry == entry)
-                return (int)i;
-        return -1;
-    };
-    EXPECT_LT(pos(3976), pos(4542));
-
-    // Untouched bosses survive.
-    EXPECT_NE(Find(out, 3975), nullptr);
-    EXPECT_NE(Find(out, 4542), nullptr);
+    // Herod survives (reordered behind the Armory's new bosses, same bit).
+    DungeonBossInfo const* herod = Find(out, 3975);
+    ASSERT_NE(herod, nullptr);
+    EXPECT_EQ(herod->encounterIndex, 4u);
 }
 
 // --- Apply: Scholomance merges Marduk & Vectus into one boss --------------
@@ -977,16 +968,17 @@ TEST(BossRosterRegistryTest, ScholomanceRealRosterEndsOnGandlingAndSkipsKirtonos
 TEST(BossRosterRegistryTest, ResultStaysClearOrdered)
 {
     std::vector<DungeonBossInfo> base = {
-        Boss(3975, 2, "Herod", 189),
-        Boss(4542, 4, "High Inquisitor Fairbanks", 189),
-        Boss(3977, 5, "High Inquisitor Whitemane", 189),
+        Boss(3975, 4, "Herod", 189),
+        Boss(3977, 6, "High Inquisitor Whitemane", 189),
+        Boss(300940, 11, "Forgemaster Gideon Crell", 189),
+        Boss(300946, 13, "Brother Aldous Thorne", 189),
     };
 
     std::vector<DungeonBossInfo> out = BossRosterRegistry::Apply(189, DcDiffKey::Dungeon(DUNGEON_DIFFICULTY_NORMAL), base);
 
     // The result is sorted by clear ORDER key (orderOverride when set, else
-    // encounterIndex), NOT by raw encounterIndex — Mograine's orderOverride 3
-    // deliberately places him (kill-bit 5) ahead of Fairbanks (bit 4).
+    // encounterIndex), NOT by raw encounterIndex — Crell's and Thorne's keys 1
+    // deliberately place them (kill-bits 11 / 13) ahead of Herod and Whitemane.
     ASSERT_FALSE(out.empty());
     for (size_t i = 1; i < out.size(); ++i)
         EXPECT_LE(BossOrderKey(out[i - 1]), BossOrderKey(out[i]))
@@ -997,17 +989,21 @@ TEST(BossRosterRegistryTest, ResultStaysClearOrdered)
 // the source entry and inheriting from it in the same patch both work.
 TEST(BossRosterRegistryTest, InheritResolvesBeforeRemoval)
 {
-    // Mograine inherits from 3977 while the same patch removes 3977 — the
-    // inherited index must still be the one 3977 carried in `base`.
+    // Azjol-Nerub's Hadronox is removed and re-added on her platform inheriting
+    // from her own entry — the inherited index must still be the one 28921
+    // carried in `base`.
     std::vector<DungeonBossInfo> base = {
-        Boss(3977, 9, "High Inquisitor Whitemane", 189),  // non-default idx
+        Boss(28921, 9, "Hadronox", 601),  // non-default idx
     };
-    std::vector<DungeonBossInfo> out = BossRosterRegistry::Apply(189, DcDiffKey::Dungeon(DUNGEON_DIFFICULTY_NORMAL), base);
+    std::vector<DungeonBossInfo> out =
+        BossRosterRegistry::Apply(601, DcDiffKey::Dungeon(DUNGEON_DIFFICULTY_NORMAL), base);
 
-    DungeonBossInfo const* mograine = Find(out, 3976);
-    ASSERT_NE(mograine, nullptr);
-    EXPECT_EQ(mograine->encounterIndex, 9u);
-    EXPECT_EQ(Find(out, 3977), nullptr);
+    DungeonBossInfo const* hadronox = Find(out, 28921);
+    ASSERT_NE(hadronox, nullptr);
+    EXPECT_EQ(hadronox->encounterIndex, 9u);
+    EXPECT_EQ(hadronox->inheritCompletionFrom, 0u);
+    EXPECT_EQ(std::count_if(out.begin(), out.end(), [](DungeonBossInfo const& b) { return b.entry == 28921; }),
+              1);
 }
 
 // Wailing Caverns: the Mutanus finale. The Disciple/escort OBJECTIVE (eventId 2)
@@ -1560,7 +1556,8 @@ TEST(BossRosterRegistryTest, AzjolNerubBracketsHadronoxWithTheWebHoldAndTheDrop)
         Boss(28921, 1, "Hadronox", 601),
         Boss(29120, 2, "Anub'arak", 601),
     };
-    std::vector<DungeonBossInfo> out = BossRosterRegistry::Apply(601, DcDiffKey::Dungeon(DUNGEON_DIFFICULTY_NORMAL), base);
+    std::vector<DungeonBossInfo> out =
+        BossRosterRegistry::Apply(601, DcDiffKey::Dungeon(DUNGEON_DIFFICULTY_NORMAL), base);
 
     ASSERT_EQ(out.size(), 5u) << "3 bosses + the web hold + the drop";
 

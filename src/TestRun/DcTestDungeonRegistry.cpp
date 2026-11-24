@@ -48,10 +48,18 @@ namespace DcTestDungeonRegistry
             { "stockade",        "The Stockade",                   34,    54.23f,     0.28f,  -18.34f, 6.260f, 24, "" },
             { "bfd",             "Blackfathom Deeps",              48,  -151.89f,   106.96f,  -39.87f, 4.530f, 24, "" },
             { "rfk",             "Razorfen Kraul",                 47,  1943.00f,  1544.63f,   82.00f, 1.380f, 30, "" },
-            { "sm-gy",           "Scarlet Monastery: Graveyard",  189,  1688.99f,  1053.48f,   18.68f, 0.001f, 30, "Graveyard" },
+            // Scarlet Monastery is four Finder sections on one map (see
+            // ScarletMonasteryEvents); each row enters at its section's start
+            // (the areatrigger / lfg_dungeon_template spot) and its token IS the
+            // run wing. The rework's section aliases sm-s1..sm-s4 name the same
+            // rows. Levels: the section's boss level (the hub: Graveyard 32,
+            // Library 34-35, Armory 37, Cathedral 40).
+            { "sm-gy",           "Scarlet Monastery: Graveyard",  189,  1688.99f,  1053.48f,   18.68f, 0.001f, 32,
+              "Graveyard" },
             { "gnomer",          "Gnomeregan",                     90,  -332.22f,    -2.28f, -150.86f, 2.770f, 32, "" },
             { "sm-lib",          "Scarlet Monastery: Library",    189,   255.35f,  -209.09f,   18.68f, 6.267f, 35, "Library" },
-            { "sm-arm",          "Scarlet Monastery: Armory",     189,  1610.83f,  -323.43f,   18.67f, 6.280f, 38, "Armory" },
+            { "sm-arm",          "Scarlet Monastery: Armory",     189,  1610.83f,  -323.43f,   18.67f, 6.280f, 37,
+              "Armory" },
             { "sm-cath",         "Scarlet Monastery: Cathedral",  189,   855.68f,  1321.50f,   18.67f, 0.002f, 40, "Cathedral" },
             { "rfd",             "Razorfen Downs",                129,  2592.55f,  1107.50f,   51.29f, 4.740f, 40, "" },
             { "uldaman",         "Uldaman",                        70,  -226.80f,    49.09f,  -46.03f, 1.390f, 44, "" },
@@ -217,6 +225,10 @@ namespace DcTestDungeonRegistry
             { "brd", "brd-s1" },    // Blackrock Depths before the Detention Block/Upper City split
             { "brd-db", "brd-s1" }, // the stock Detention Block (to Bael'Gar), before the Finder sections
             { "brd-uc", "brd-s4" }, // the stock Upper City (Lock -> Emperor), before the Finder sections
+            { "sm-s1", "sm-gy" },   // Scarlet Monastery Finder section 1, the Graveyard
+            { "sm-s2", "sm-lib" },  // Scarlet Monastery Finder section 2, the Library
+            { "sm-s3", "sm-arm" },  // Scarlet Monastery Finder section 3, the Armory
+            { "sm-s4", "sm-cath" }, // Scarlet Monastery Finder section 4, the Cathedral
         };
         return aliases;
     }
@@ -249,7 +261,7 @@ namespace DcTestDungeonRegistry
                 if (std::string(target) == row.token)
                 {
                     LOG_INFO("playerbots.dungeonclear",
-                             "[dc-test] dungeon token '{}' is retired — resolving it as '{}'",
+                             "[dc-test] dungeon token '{}' is an alias — resolving it as '{}'",
                              tokenOrMapId, target);
                     return &row;
                 }

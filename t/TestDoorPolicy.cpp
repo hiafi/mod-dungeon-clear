@@ -139,7 +139,9 @@ TEST(DcDoorPolicyTest, ZeroItemIndexStillARequirement)
 //
 // SM's Armory (Herod's Door) and Cathedral (Chapel Door) both ride lock 299,
 // which the policy above correctly refuses for a keyless, non-rogue tank. The
-// registry waives that requirement per GO ENTRY so those wings stay clearable.
+// registry waives that requirement per GO ENTRY so those wings stay clearable
+// (the rework also makes both keyless; the Chapel Door is navigation-ignored
+// and opened by the Last Stand event, t/TestDungeonEvent).
 TEST(DcDoorPolicyTest, ScarletMonasteryWingDoorsAreKeyExempt)
 {
     EXPECT_TRUE(DcEventDoorRegistry::IsKeyExempt(101854));   // Herod's Door

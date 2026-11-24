@@ -256,6 +256,58 @@ namespace
     // Halls of Stone reasoning); Gandling's 45 reaches the stair top.
     //
     // musterSpread 10, the same number and reasoning as the rows above.
+    // --- Scarlet Monastery (189) — Arcanist Doan --------------------------------
+    //
+    // The rework seals Doan's chamber for his fight (designer 2026-11-18): the
+    // Chamber Seal (GO 301319, KT-SM's SealedArena in boss_arcanist_doan_rework)
+    // rises in the doorway 3 s after the pull and drops on his death or a wipe.
+    // At the close the arena pulls in living players within 60yd of its entry
+    // spot, but a straggler is still out of the fight until then, so the party
+    // musters inside before the engage like the rows above.
+    //
+    // The volume is the chamber, read off the 189 navmesh (NAVMESH-REPORT, the
+    // Athenaeum map; [navmesh estimate]): floor x 129-167, y -409 to -449, z 18.5,
+    // joined to the outer hall (x 171-209) by a single-file doorway 1.5-2.8yd wide
+    // and 3yd long at about x 167-171, y -430 to -434. maxX 166 keeps the doorway
+    // out; the X, Y and Z bounds are the boss's own arena box (DoanArena: x 127-169,
+    // y -451 to -407, z 15-24) trimmed at the door.
+    //
+    // approachRadius 35. The doorway is ~21yd from his spawn (148.3, -428.7), so
+    // 35 arms the clump in the outer hall (x ~183), before the party threads the
+    // door, and not back in the passage to the hall.
+    //
+    // musterSpread 10, the same number and reasoning as the rows above. Doan walks
+    // a short patrol inside the chamber (path 401240, within 15yd of his spawn);
+    // the gates measure from the anchor (his spawn), which the whole patrol sits
+    // inside.
+    // --- Scarlet Monastery (189) — Herod ---------------------------------------
+    //
+    // The rework seals Herod's hall the same way (D11, KT-SM's SealedArena in
+    // boss_herod_rework): 3 s after the pull Herod's Door (101854, at (1933.69,
+    // -431.65, 18.67), the hall's only entrance) shuts, and it reopens on his
+    // death, a wipe or an evade. At the close the arena pulls in living players
+    // within 60yd of the door spur. On heroic (D11H) the door also opens at his
+    // 50% prayer and shuts again 12 s later; the muster only gates the engage, so
+    // that mid-fight window changes nothing here. The door itself stays an
+    // ordinary keyless door the party opens on the way in (IsKeyExempt; the
+    // instance owns it only while he fights), and the Lever 6yd inside is never a
+    // DC step: it is not selectable while he fights.
+    //
+    // The volume is the hall, read off the 189 navmesh (NAVMESH-REPORT, the Herod
+    // hall map in navmesh/maps3.txt): the door spur and its apron (z 15.5-18.2,
+    // x 1934-1953), the ledge ring (z 7.6-15.5) and the pit (z 6.4-7.6) round
+    // (1961.9, -431.6), out to about r 27 (D11's HerodArena circle). minX 1936
+    // keeps the door and its sill (x 1933.7) out; Z BAND 4-21 is the pit floor to
+    // the spur's top; nothing else of the map is stacked over or under it.
+    //
+    // approachRadius 45. The door is 33.8yd (3D) from Herod in the pit, 12.4yd
+    // above him; 45 arms the clump in the cross hall about 10yd west of the door,
+    // before the party threads it. The cross hall's own trash (x 1921-1928) is on
+    // the route and is fought under the ordinary gates before the walk-in. From
+    // the door the party walks round to the two north ramps into the pit (92yd by
+    // mesh): Herod is pulled in the pit, everyone already behind the door.
+    //
+    // musterSpread 10, the same number and reasoning as the rows above.
     SealedEncounterRow const kRows[] =
     {
         // mapId  boss   minX    maxX    minY    maxY   approach  muster
@@ -275,6 +327,10 @@ namespace
         {   289, 10504,   165.0f,   200.0f,   -97.0f,   -32.0f,  80.0f, 10.0f,  64.0f,  79.0f },
         {   289, 10502,   211.0f,   277.0f,   -16.0f,    16.0f,  72.0f, 10.0f,  70.0f,  80.0f },
         {   289,  1853,   160.0f,   202.0f,   -22.0f,    20.0f,  45.0f, 10.0f,  72.0f,  80.0f },
+        // Scarlet Monastery: Arcanist Doan's chamber
+        {   189,  6487,   127.0f,   166.0f,  -451.0f,  -407.0f,  35.0f, 10.0f,  15.0f,  24.0f },
+        // Scarlet Monastery: Herod's hall
+        {   189,  3975,  1936.0f,  1990.0f,  -459.0f,  -404.0f,  45.0f, 10.0f,   4.0f,  21.0f },
     };
 }
 

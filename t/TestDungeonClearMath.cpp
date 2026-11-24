@@ -3669,3 +3669,136 @@ TEST(DungeonClearLeaderAssistTest, GroupmateFallbackHasHysteresis)
     // A real round-the-corner distance walks again.
     EXPECT_FALSE(DungeonClearMath::LeaderAssistFallbackYields(15.1f, true, in, out));
 }
+
+// ===== Run-end fight hold (HoldRunEndForFight, R-2-FW MN-2) =====
+
+// The kill tick arms the clock and holds through the settle window even with no
+// fight yet: the trainees Herod's death summons need a moment to engage.
+TEST(DungeonClearMathTest, RunEndFightHoldSettlesFirst)
+{
+    std::uint32_t since = 0;
+    EXPECT_TRUE(DungeonClearMath::HoldRunEndForFight(false, 10000, 3000, 120000, since));
+    EXPECT_EQ(since, 10000u);
+    EXPECT_TRUE(DungeonClearMath::HoldRunEndForFight(false, 12999, 3000, 120000, since));
+    EXPECT_FALSE(DungeonClearMath::HoldRunEndForFight(false, 13000, 3000, 120000, since));
+}
+
+// Past the settle window the run end waits for the fight, up to the cap.
+TEST(DungeonClearMathTest, RunEndFightHoldWaitsForTheFightUpToTheCap)
+{
+    std::uint32_t since = 0;
+    EXPECT_TRUE(DungeonClearMath::HoldRunEndForFight(true, 5000, 3000, 120000, since));
+    EXPECT_TRUE(DungeonClearMath::HoldRunEndForFight(true, 65000, 3000, 120000, since));   // the trainees, 60 s in
+    EXPECT_FALSE(DungeonClearMath::HoldRunEndForFight(false, 66000, 3000, 120000, since));  // fight over -> end
+    std::uint32_t stuck = 0;
+    EXPECT_TRUE(DungeonClearMath::HoldRunEndForFight(true, 5000, 3000, 120000, stuck));
+    EXPECT_TRUE(DungeonClearMath::HoldRunEndForFight(true, 124999, 3000, 120000, stuck));
+    EXPECT_FALSE(DungeonClearMath::HoldRunEndForFight(true, 125000, 3000, 120000, stuck));  // capped
+}
+
+// The ms-0 arm (and a small step back) never ends the hold early, and a hold that spans the 49.7-day
+// getMSTime() wrap counts elapsed time across it (getMSTimeDiff semantics), so
+// the settle and the cap still end (RF-2 mi-2).
+TEST(DungeonClearMathTest, RunEndFightHoldClockEdges)
+{
+    std::uint32_t since = 0;
+    EXPECT_TRUE(DungeonClearMath::HoldRunEndForFight(false, 0, 3000, 120000, since));
+    EXPECT_EQ(since, 1u);
+    EXPECT_TRUE(DungeonClearMath::HoldRunEndForFight(false, 0, 3000, 120000, since));
+    EXPECT_FALSE(DungeonClearMath::HoldRunEndForFight(false, 3001, 3000, 120000, since));   // 3,000 ms after the arm
+
+    std::uint32_t wrap = 0;
+    EXPECT_TRUE(DungeonClearMath::HoldRunEndForFight(false, 0xFFFFF800u, 3000, 120000, wrap));   // 2,048 ms to the wrap
+    EXPECT_EQ(wrap, 0xFFFFF800u);
+    EXPECT_TRUE(DungeonClearMath::HoldRunEndForFight(false, 0x00000100u, 3000, 120000, wrap));   // 2,304 ms: settling
+    EXPECT_FALSE(DungeonClearMath::HoldRunEndForFight(false, 0x00000800u, 3000, 120000, wrap));  // 4,096 ms: settled
+    std::uint32_t wrapFight = 0xFFFFF000u;
+    EXPECT_TRUE(DungeonClearMath::HoldRunEndForFight(true, 0x00000800u, 3000, 120000, wrapFight));  // 6,144 ms
+    EXPECT_TRUE(DungeonClearMath::HoldRunEndForFight(true, 0xFFFFF000u + 119999u, 3000, 120000, wrapFight));
+    EXPECT_FALSE(DungeonClearMath::HoldRunEndForFight(true, 0xFFFFF000u + 120000u, 3000, 120000, wrapFight));  // capped
+}
+
+// The party holder scan (RF-2 mi-1): capped, it answers "held" past the cap
+// with nobody held; uncapped (0) it scans every member. Up to 12 members both
+// give the same answer, so five-man runs are unchanged.
+TEST(DungeonClearMathTest, PartyHolderScanCapAndFullScan)
+{
+    auto const held = [](bool b) { return b; };
+    std::vector<bool> five(4, false);
+    EXPECT_FALSE(DungeonClearMath::ScanPartyForHolder(five, held, 12));
+    EXPECT_FALSE(DungeonClearMath::ScanPartyForHolder(five, held, 0));
+    five[2] = true;
+    EXPECT_TRUE(DungeonClearMath::ScanPartyForHolder(five, held, 12));
+    EXPECT_TRUE(DungeonClearMath::ScanPartyForHolder(five, held, 0));
+
+    std::vector<bool> twelve(12, false);
+    EXPECT_FALSE(DungeonClearMath::ScanPartyForHolder(twelve, held, 12));
+    EXPECT_FALSE(DungeonClearMath::ScanPartyForHolder(twelve, held, 0));
+
+    std::vector<bool> raid(24, false);   // a 25-man run, nobody fighting
+    EXPECT_TRUE(DungeonClearMath::ScanPartyForHolder(raid, held, 12));    // the capped answer
+    EXPECT_FALSE(DungeonClearMath::ScanPartyForHolder(raid, held, 0));    // the run-end answer
+    raid[20] = true;                     // one member past the cap is held
+    EXPECT_TRUE(DungeonClearMath::ScanPartyForHolder(raid, held, 0));
+}
+
+// Pre-boss regroup (F-4c): the dungeon boss engage holds until the party is near
+// the tank and the healer sees it, unless the boss already fights. Released once
+// per attempt (the walk-in reopens the gap and must not stutter), bounded by the
+// budget, fresh per boss and after the latch goes stale. Loksey, tr-20261123-214436-1.
+TEST(DungeonClearMathTest, BossRegroupHoldsUntilSetThenStaysReleased)
+{
+    using DungeonClearMath::BossRegroupLatch;
+    using DungeonClearMath::IsBossRegroupActive;
+    using DungeonClearMath::ShouldHoldBossRegroup;
+    std::uint32_t const budget = 20000, stale = 2000, loksey = 3974, kell = 300910;
+
+    BossRegroupLatch latch;
+    EXPECT_FALSE(IsBossRegroupActive(latch, 1000, stale));   // never asked
+
+    // Healer back and out of sight: hold, and the followers are told to close in.
+    EXPECT_TRUE(ShouldHoldBossRegroup(false, false, loksey, 1000, budget, stale, latch));
+    EXPECT_TRUE(ShouldHoldBossRegroup(false, false, loksey, 1500, budget, stale, latch));
+    EXPECT_TRUE(IsBossRegroupActive(latch, 1600, stale));
+    // Set: release, and the release sticks while the tank walks in and the gap opens.
+    EXPECT_FALSE(ShouldHoldBossRegroup(false, true, loksey, 3000, budget, stale, latch));
+    EXPECT_FALSE(ShouldHoldBossRegroup(false, false, loksey, 3200, budget, stale, latch));
+    EXPECT_TRUE(IsBossRegroupActive(latch, 3300, stale));    // party stays on the tank
+    // The tank left the boss (wipe, run moved on): stale for followers, fresh for the gate.
+    EXPECT_FALSE(IsBossRegroupActive(latch, 3200 + stale + 1, stale));
+    EXPECT_TRUE(ShouldHoldBossRegroup(false, false, loksey, 3200 + stale + 1, budget, stale, latch));
+
+    // A different boss is a fresh attempt.
+    BossRegroupLatch next;
+    EXPECT_FALSE(ShouldHoldBossRegroup(false, true, loksey, 5000, budget, stale, next));
+    EXPECT_TRUE(ShouldHoldBossRegroup(false, false, kell, 5100, budget, stale, next));
+}
+
+TEST(DungeonClearMathTest, BossRegroupNeverWaitsOnAFightingBossAndIsBounded)
+{
+    using DungeonClearMath::BossRegroupLatch;
+    using DungeonClearMath::ShouldHoldBossRegroup;
+    std::uint32_t const budget = 20000, stale = 2000, boss = 3974;
+
+    // Already in combat: join at once, never hold.
+    BossRegroupLatch fighting;
+    EXPECT_FALSE(ShouldHoldBossRegroup(true, false, boss, 1000, budget, stale, fighting));
+    EXPECT_FALSE(ShouldHoldBossRegroup(false, false, boss, 1200, budget, stale, fighting));
+
+    // A straggler who never comes in: held for the budget, then engaged anyway.
+    BossRegroupLatch stuck;
+    std::uint32_t t = 1000;
+    for (; t < 1000 + budget; t += 500)
+        EXPECT_TRUE(ShouldHoldBossRegroup(false, false, boss, t, budget, stale, stuck)) << t;
+    EXPECT_FALSE(ShouldHoldBossRegroup(false, false, boss, t, budget, stale, stuck));
+    EXPECT_FALSE(ShouldHoldBossRegroup(false, false, boss, t + 500, budget, stale, stuck));
+
+    // Budget 0 = gate off; now == 0 still latches (0 means "never asked").
+    BossRegroupLatch off;
+    EXPECT_FALSE(ShouldHoldBossRegroup(false, false, boss, 1000, 0, stale, off));
+    BossRegroupLatch zero;
+    EXPECT_TRUE(ShouldHoldBossRegroup(false, false, boss, 0, budget, stale, zero));
+    for (t = 500; t < 1 + budget; t += 500)
+        EXPECT_TRUE(ShouldHoldBossRegroup(false, false, boss, t, budget, stale, zero)) << t;
+    EXPECT_FALSE(ShouldHoldBossRegroup(false, false, boss, 1 + budget, budget, stale, zero));
+}

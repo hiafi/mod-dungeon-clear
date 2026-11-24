@@ -551,6 +551,42 @@ namespace DungeonClearMath
                                       std::uint32_t waitMs, std::uint32_t minMs,
                                       std::uint32_t& waitSinceOut);
 
+    // Pre-boss REGROUP latch, kept on the leader's DcRunState. One per run; it
+    // follows the boss being engaged (`entry`) and goes stale on its own when
+    // nobody has asked for `staleMs` (the tank left the boss, the run wiped), so
+    // the next attempt at any boss starts a fresh budget without a reset site.
+    struct BossRegroupLatch
+    {
+        std::uint32_t entry = 0;
+        std::uint32_t sinceMs = 0;   // 0 = not holding yet
+        std::uint32_t lastMs = 0;    // last tick the gate was asked (0 = never)
+        bool released = false;       // regrouped, timed out or boss already fighting
+    };
+
+    // Pre-boss regroup gate (pure). The at-boss engage in a dungeon used to check
+    // only the between-pulls spread (PartyMaxSpread from the tank) and the rest
+    // floors, while dynamic pull mode parks the party PullDynamicPartyLag behind
+    // the tank. So the engage walked in with the healer ~25yd back and often
+    // around a corner (tr-20261123-214436-1: Loksey pulled with the healer 43.7yd
+    // from him, behind the alcove's neck, no LOS; the tank died unhealed).
+    //
+    // Returns true to HOLD the engage. `regrouped` is the caller's party read
+    // (every bot within range of the tank, every healer also in LOS). Release is
+    // latched for the rest of the attempt, so the tank's own walk-in (which opens
+    // the gap again) never stutters the pull. `bossInCombat` releases at once:
+    // a boss already fighting is joined, never waited on. Bounded by `budgetMs`
+    // (0 = gate disabled), so a member who cannot come in never stalls the run.
+    bool ShouldHoldBossRegroup(bool bossInCombat, bool regrouped, std::uint32_t entry,
+                               std::uint32_t now, std::uint32_t budgetMs,
+                               std::uint32_t staleMs, BossRegroupLatch& latch);
+
+    // Follower-side read of the leader's latch: true while the tank stands at the
+    // boss being asked (the gate ran within `staleMs`), holding or already released.
+    // Followers use it to stop lagging (scout-lag, camp hold) and stay on the tank,
+    // so the gate can be met and the party walks in with the tank, not 15yd behind.
+    bool IsBossRegroupActive(BossRegroupLatch const& latch, std::uint32_t now,
+                              std::uint32_t staleMs);
+
     // Turn-and-plant gate (pure). A human tank dragging a pack back to camp turns
     // and fights the moment the pack is glued to it, rather than sprinting the
     // whole leg back-turned (the single biggest visual bot-tell, and why the
@@ -804,6 +840,57 @@ namespace DungeonClearMath
         // arming tick (sinceMs nudged to 1) or a backward clock step / getMSTime wrap,
         // where "no time has elapsed yet" is the right answer.
         return now >= sinceMs && (now - sinceMs) >= timeoutMs;
+    }
+
+    // Run-end fight hold (pure, clock by reference). The last boss is down, but
+    // the fight may not be: Herod's death lets twenty Scarlet Trainees in on the
+    // party (Scarlet Monastery Armory, R-2-FW MN-2), and ending the run on the
+    // kill reports a cleared wing that then wipes, with DC off the bots. So the
+    // all-cleared trigger holds the run end while the party is still held by a
+    // live enemy (`fighting`), for at most `capMs` (a fight that never ends must
+    // not hang the run), and always for the first `settleMs`, so units summoned
+    // by the kill have a moment to reach the party. `sinceMs` is the caller's
+    // latch (0 = not armed), armed on the first call, cleared by the caller when
+    // a next boss reappears. Returns true to HOLD the run end.
+    inline bool HoldRunEndForFight(bool fighting, std::uint32_t now, std::uint32_t settleMs,
+                                   std::uint32_t capMs, std::uint32_t& sinceMs)
+    {
+        if (sinceMs == 0)
+            sinceMs = now ? now : 1;   // arm; avoid the 0 "unarmed" sentinel on ms 0
+        // Unsigned subtraction is getMSTimeDiff: it stays right across the
+        // 49.7-day getMSTime() wrap, where a `now >= sinceMs` guard would pin
+        // `elapsed` at 0 and hold the run end until the clock came round again.
+        // A difference past half the range is no hold this function ever
+        // keeps (the cap is minutes): it is a step back (the ms-0 arm's
+        // sentinel 1 read again at ms 0), counted as no time.
+        std::uint32_t const diff = now - sinceMs;
+        std::uint32_t const elapsed = diff >= 0x80000000u ? 0 : diff;
+        if (elapsed < settleMs)
+            return true;
+        return fighting && elapsed < capMs;
+    }
+
+    // Party holder scan (pure). Walks `members` (already filtered to the
+    // bot's map, the bot itself left out) and asks `held(member)` of each,
+    // stopping at the first holder. `maxScans` > 0 caps the cost at raid scale:
+    // past that many members without a holder the answer is TRUE, which is
+    // right for callers that read "held" as "do not act yet" every tick (the rez
+    // release, the phantom hatch). `maxScans` 0 scans every member: the run-end
+    // fight hold reads "held" as "do not end the run", so a capped TRUE there
+    // would hold every 13+ member raid to the full cap (RF-2 mi-1). For a party
+    // of 12 or fewer the two answers are the same.
+    template <typename Members, typename HeldFn>
+    bool ScanPartyForHolder(Members const& members, HeldFn&& held, int maxScans)
+    {
+        int scanned = 0;
+        for (auto const& member : members)
+        {
+            if (maxScans > 0 && ++scanned > maxScans)
+                return true;
+            if (held(member))
+                return true;
+        }
+        return false;
     }
 
     // Flagged-in-combat driving gate (pure, streak clock by reference).

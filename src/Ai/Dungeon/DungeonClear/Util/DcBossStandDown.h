@@ -236,9 +236,25 @@ namespace DcBossStandDown
         return isBoss && alive && inCombat && !evading && victimIsOtherMember;
     }
 
+    // THE ANCHORED OBJECTIVE ENCOUNTER, the breaker gate's second shape. Some
+    // five-man encounters have no boss at all: the Scarlet Monastery Last Stand is
+    // an objective (the roster has no Boss row for it, Mograine carries no
+    // dungeon-boss flag) whose instance slot reads IN_PROGRESS for the 3-5 min of
+    // waves. A company caster holding the tank from beyond DC_ENGAGE_RANGE leaves
+    // the healer with phantom-shaped combat, and the breaker would clear it after
+    // StuckCombatTimeout (R-2-FW MJ-1). PURE: a roster OBJECTIVE row with a
+    // boss-state slot (`slot` >= 0) whose raw EncounterState is IN_PROGRESS.
+    inline constexpr uint32 kEncounterInProgress = 1;  // EncounterState IN_PROGRESS
+
+    inline bool ObjectiveEncounterLive(bool isObjective, int32 slot, uint32 bossState)
+    {
+        return isObjective && slot >= 0 && bossState == kEncounterInProgress;
+    }
+
     // Is a boss fight live for `bot`'s party on a five-man map (dungeon, not a
     // raid: raids answer through IsActive)? Walks every member's PvE combat
-    // references for a holder HoldsFiveManBossFight accepts. No leader needed:
+    // references for a holder HoldsFiveManBossFight accepts, after asking whether
+    // a roster objective's encounter is live (ObjectiveEncounterLive). No leader needed:
     // the roster read is the run owner's when there is one, the core's
     // dungeon-boss flag otherwise. No hysteresis: the breaker's own timeout
     // already runs a clock, and this resets it.

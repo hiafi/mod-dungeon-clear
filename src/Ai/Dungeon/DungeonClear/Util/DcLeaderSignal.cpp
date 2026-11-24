@@ -800,6 +800,13 @@ bool DcLeaderSignal::GetLeaderCampHold(Player* bot, Position& campOut, bool& pas
     // somewhere it has been ordered not to go.
     if (!IsPullPhaseHolding(static_cast<uint32>(pull.phase)) && pull.scriptedStage < 0)
     {
+        // PRE-BOSS REGROUP (any dungeon boss): the tank is holding the engage until
+        // the party is near it and the healer sees it. Same reasoning as the sealed
+        // case below: a camp hold would ask the party to be where it was told not
+        // to go. Self-staling, so it never outlives the tank's wait at the boss.
+        if (DungeonClearMath::IsBossRegroupActive(DcRun::Of(ctx).bossRegroup, getMSTime(),
+                                                   DC_BOSS_REGROUP_STALE_MS))
+            return false;
         if (std::optional<DungeonBossInfo> const next =
                 ctx->GetValue<std::optional<DungeonBossInfo>>(DcKey::NextDungeonBoss)->Get())
         {
@@ -1196,6 +1203,14 @@ bool DcLeaderSignal::IsLeaderDynamicScouting(Player* bot)
     DcPullContext const& pull =
         ctx->GetValue<DcPullContext&>(DcKey::PullContext)->Get();
     if (pull.phase != DcPullPhase::Idle)
+        return false;
+
+    // Pre-boss regroup: the tank holds the boss engage until the party is near it
+    // and the healer sees it, so the lag must stand down or the gate can only time
+    // out, and it stays down for the walk-in. See
+    // DungeonClearMath::ShouldHoldBossRegroup.
+    if (DungeonClearMath::IsBossRegroupActive(DcRun::Of(ctx).bossRegroup, getMSTime(),
+                                               DC_BOSS_REGROUP_STALE_MS))
         return false;
 
     // Leeroy roll-in: with a standing Leeroy verdict, release the lag as the tank

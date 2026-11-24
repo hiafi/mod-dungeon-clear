@@ -100,6 +100,240 @@ namespace DcHellfireRamparts
     constexpr float FINAL_APPROACH_MIN_Z = 76.0f;
 }
 
+// Scarlet Monastery (map 189) — the numbers ScarletMonasteryEvents.cpp's roster
+// patch and wings share with the gtests (t/TestRunWing, t/TestSealedEncounter).
+// The reasoning for each is in that file.
+//
+// The rework (mod-dungeon-bosses, ScarletMonasteryRework.h) gives the map 14
+// encounters, slot = DungeonEncounter bit 0-13, and four Finder sections, each a
+// wing with its own start, last boss and in-map portal to the next:
+//   1 Graveyard (LFG 18,  heroic 314): Vishas, Ironspine, the council -> Thalnos
+//   2 Library   (LFG 165, heroic 315): Loksey, Kell, Hollis Grey -> Doan
+//   3 Armory    (LFG 163, heroic 316): Crell, Halden -> Herod
+//   4 Cathedral (LFG 164, heroic 317): Thorne, the Last Stand -> Whitemane
+// Wave 1 (sections 1-2, DC-1) and wave 2 (sections 3-4, DC-2).
+namespace DcScarletMonastery
+{
+    constexpr uint32 MAP_ID = 189;
+
+    // DungeonEncounter bits (= the rework's boss slots).
+    constexpr uint32 BIT_VISHAS = 0;
+    constexpr uint32 BIT_THALNOS = 1;
+    constexpr uint32 BIT_LOKSEY = 2;
+    constexpr uint32 BIT_DOAN = 3;
+    constexpr uint32 BIT_IRONSPINE = 7;
+    constexpr uint32 BIT_COUNCIL = 8;           // credit spell 212300: no BossSpawnIndex row
+    constexpr uint32 BIT_KELL = 9;
+    constexpr uint32 BIT_HOLLIS_GREY = 10;
+    constexpr uint32 BIT_HEROD = 4;
+    constexpr uint32 BIT_LAST_STAND = 5;        // credit spell 212301 (encounter 449): no BossSpawnIndex row
+    constexpr uint32 BIT_WHITEMANE = 6;
+    constexpr uint32 BIT_CRELL = 11;
+    constexpr uint32 BIT_HALDEN = 12;
+    constexpr uint32 BIT_THORNE = 13;
+    // The Last Stand's boss-state slot (BOSS_LAST_STAND, = its bit): the instance
+    // writes it IN_PROGRESS at the Chapel Door and DONE at Mograine's 1% fall.
+    constexpr int32 SLOT_LAST_STAND = 5;
+    constexpr uint32 STATE_DONE = 3;            // EncounterState DONE
+
+    constexpr uint32 NPC_VISHAS = 3983;
+    constexpr uint32 NPC_IRONSPINE = 6489;
+    constexpr uint32 NPC_FALLEN_CHAMPION = 6488;
+    constexpr uint32 NPC_AZSHIR = 6490;
+    constexpr uint32 NPC_THALNOS = 4543;
+    constexpr uint32 NPC_LOKSEY = 3974;
+    constexpr uint32 NPC_KELL = 300910;
+    constexpr uint32 NPC_HOLLIS_GREY = 300913;
+    constexpr uint32 NPC_DOAN = 6487;
+    constexpr uint32 NPC_CRELL = 300940;
+    constexpr uint32 NPC_HALDEN = 300942;
+    constexpr uint32 NPC_HEROD = 3975;
+    constexpr uint32 NPC_THORNE = 300946;
+    constexpr uint32 NPC_MOGRAINE = 3976;       // the Last Stand's commander; never a clear target
+    constexpr uint32 NPC_WHITEMANE = 3977;
+    constexpr uint32 NPC_FAIRBANKS = 4542;      // the stock one, in his room behind the Secret Door (D14H)
+
+    constexpr uint32 LFG_SECTION_1 = 18;
+    constexpr uint32 LFG_SECTION_1_HEROIC = 314;
+    constexpr uint32 LFG_SECTION_2 = 165;
+    constexpr uint32 LFG_SECTION_2_HEROIC = 315;
+    constexpr uint32 LFG_SECTION_3 = 163;
+    constexpr uint32 LFG_SECTION_3_HEROIC = 316;
+    constexpr uint32 LFG_SECTION_4 = 164;
+    constexpr uint32 LFG_SECTION_4_HEROIC = 317;
+
+    constexpr uint32 SECTION_1_ENCOUNTER_MASK =
+        (1u << BIT_VISHAS) | (1u << BIT_THALNOS) | (1u << BIT_IRONSPINE) | (1u << BIT_COUNCIL);
+    constexpr uint32 SECTION_2_ENCOUNTER_MASK =
+        (1u << BIT_LOKSEY) | (1u << BIT_DOAN) | (1u << BIT_KELL) | (1u << BIT_HOLLIS_GREY);
+    constexpr uint32 SECTION_3_ENCOUNTER_MASK =
+        (1u << BIT_HEROD) | (1u << BIT_CRELL) | (1u << BIT_HALDEN);
+    constexpr uint32 SECTION_4_ENCOUNTER_MASK =
+        (1u << BIT_LAST_STAND) | (1u << BIT_WHITEMANE) | (1u << BIT_THORNE);
+
+    // Clear order inside each wing (BossOrderKey; the wings never share a list).
+    constexpr int32 ORDER_VISHAS = 1;
+    constexpr int32 ORDER_IRONSPINE = 2;
+    constexpr int32 ORDER_COUNCIL = 3;          // both council anchors
+    constexpr int32 ORDER_THALNOS = 4;
+    constexpr int32 ORDER_LOKSEY = 1;
+    constexpr int32 ORDER_KELL = 2;
+    constexpr int32 ORDER_HOLLIS_GREY = 3;
+    constexpr int32 ORDER_DOAN = 4;
+    constexpr int32 ORDER_CRELL = 1;
+    constexpr int32 ORDER_HALDEN = 2;
+    constexpr int32 ORDER_HEROD = 3;
+    constexpr int32 ORDER_THORNE = 1;
+    constexpr int32 ORDER_LAST_STAND = 2;       // the Chapel Door objective
+    constexpr int32 ORDER_WHITEMANE = 3;
+
+    // The council fights on the lawn (section 7 #18 A): the Champion's spot, Azshir
+    // 3 yd behind him (rev_council_scarlet_monastery.sql moves both spawns).
+    constexpr float CHAMPION_X = 1798.5f;
+    constexpr float CHAMPION_Y = 1348.5f;
+    constexpr float CHAMPION_Z = 18.6f;
+    constexpr float AZSHIR_X = 1801.5f;
+    constexpr float AZSHIR_Y = 1348.5f;
+    constexpr float AZSHIR_Z = 18.6f;
+
+    // Ironspine's home on the lawn (rev_ironspine moves spawn guid 12164 here). His
+    // parts land 15-20 yd from him; the council's spot is 63 yd north of it.
+    constexpr float IRONSPINE_X = 1796.5f;
+    constexpr float IRONSPINE_Y = 1285.5f;
+    constexpr float IRONSPINE_Z = 18.8f;
+    constexpr float IRONSPINE_PART_LAND_MAX = 20.0f;
+
+    // Room pre-clears (RoomAggroRegistry; distances from the live DB, 2026-11-20).
+    // A room's radius takes what must die first; its pull-out radius is the ring
+    // that comes with the boss. Without a pull-out radius that ring is the computed
+    // boss-aggro sphere (~28 yd at an even level: 20 + both reaches + margin 2 +
+    // padding 3), which would keep most of every room here up as "comes with him".
+    //   Ironspine: the 30 yd round his home (STAGE-D2; the farthest, an Anguished
+    //     Dead, 30.8 yd); only the Haunting Phantasm 2.5 yd off him comes with him.
+    //   The council: the 30 yd round the Champion's lawn spot (two Anguished Dead
+    //     14.6 / 18 yd, Unfettered Spirits 24-29 yd, an Anguished Dead 29.8 yd); the
+    //     Anguished Dead 14.6 yd out (wander 5) comes with them.
+    //   Loksey: the kennel hall (x 155-208, y -240 to -310, its three Beastmaster
+    //     packs, Gallants and Adepts 35-91 yd from his alcove; R-1-LIB m3). Nothing
+    //     stands inside his sphere but his own hounds.
+    //   Kell: the long hall (x 212-278, y -300 to -349; the case-spot trash, a Monk
+    //     1.4 yd from the north skull case; R-1-LIB m3), banded in y so Hollis
+    //     Grey's hall south of it stays his; his three Diviners 7.9-11.6 yd out
+    //     come with him.
+    //   Hollis Grey: the reading hall (twelve spawns 8.7-31.7 yd, STAGE-D7); the
+    //     Diviner 8.7 yd and the Monk 11.5 yd come with him.
+    constexpr float IRONSPINE_ROOM_RADIUS = 32.0f;
+    constexpr float IRONSPINE_PULL_OUT_RADIUS = 14.0f;
+    constexpr float COUNCIL_ROOM_RADIUS = 30.0f;
+    constexpr float COUNCIL_PULL_OUT_RADIUS = 16.0f;
+    constexpr float LOKSEY_ROOM_RADIUS = 92.0f;
+    constexpr float KELL_ROOM_RADIUS = 37.0f;
+    constexpr float KELL_ROOM_MIN_Y = -350.0f;
+    constexpr float KELL_ROOM_MAX_Y = -298.0f;
+    constexpr float KELL_PULL_OUT_RADIUS = 14.0f;
+    constexpr float HOLLIS_GREY_ROOM_RADIUS = 33.0f;
+    constexpr float HOLLIS_GREY_PULL_OUT_RADIUS = 14.0f;
+    // Wave 2 (live DB 2026-11-20, from the rev spawns: Crell (1776.0, -390.5, 8.0),
+    // Halden (1875.0, -400.0, 18.7), Thorne (908.2, 1399.2, 19.0)).
+    //   Crell: the storeroom (STAGE-D9: clear it before the pull). Fourteen
+    //     Protectors, Guardsmen and Soldiers 10.4-36.5 yd, all on the z 8 floor,
+    //     incl. the patrol 40151 whose path crosses the anvil. Pull-out 9: none
+    //     comes with him (the nearest, Guardsman 40149, is 10.4 yd out).
+    //   Halden: his chamber (STAGE-D10: five soldiers 11.3-17.9 yd, six more
+    //     19.6-27.7 yd in the necks and the side rooms). His detection is 10;
+    //     pull-out 9 kills all eleven first and pulls him alone.
+    //   Thorne: the lower garden (STAGE-D12: the Centurion 20.7 yd and the
+    //     Defender 22.7 yd, random movement 3, would drag him in; Myrmidons and a
+    //     Sorcerer 27.8-30.9 yd at the west entry; the moved Centurion 39953 and a
+    //     Sorcerer 39-40 yd in the garden's west edge). Pull-out 12: nothing
+    //     inside it once 39953 has moved.
+    constexpr float CRELL_ROOM_RADIUS = 37.0f;
+    constexpr float CRELL_PULL_OUT_RADIUS = 9.0f;
+    constexpr float HALDEN_ROOM_RADIUS = 28.0f;
+    constexpr float HALDEN_PULL_OUT_RADIUS = 9.0f;
+    constexpr float THORNE_ROOM_RADIUS = 40.0f;
+    constexpr float THORNE_PULL_OUT_RADIUS = 12.0f;
+
+    // Doan's Chamber Seal (D8, KT-SM SealedArena): shut 3 s after the pull, open
+    // on his death or a wipe. A bot must never click it.
+    constexpr uint32 GO_CHAMBER_SEAL = 301319;
+
+    // Hard mode triggers: human work, never a DC step (goobers, type 10, whose
+    // script owns the click; DC clicks doors, chests and event-step objects only).
+    // D4H's four gravestones and the blood rite (heroic; they refuse while the
+    // council lives), and D8H's four evidence pages.
+    constexpr uint32 GO_DESECRATION_FIRST = 301310;
+    constexpr uint32 GO_DESECRATION_LAST = 301314;
+    constexpr uint32 GO_HERESY_PAGE_FIRST = 301320;
+    constexpr uint32 GO_HERESY_PAGE_LAST = 301323;
+    // Wave 2: Herod's hard mode is a /taunt (HM0, players only; no object); the
+    // Torch (D14H) is a button whose use opens the Secret Door to the stock
+    // Fairbanks's room. Neither is ever a DC step.
+    constexpr uint32 GO_TORCH = 97701;
+    constexpr uint32 GO_SECRET_DOOR = 97700;
+
+    // --- section 3: Herod's hall (D11, SealedEncounterRegistry) -----------
+    // Herod's Door (keyless, the party opens it like any door) is shut by his
+    // SealedArena 3 s after the pull and reopened on his death or a wipe; the
+    // Lever 6 yd inside is not selectable while he fights. The hall behind the
+    // door: the door spur (z 15.5-18.2, x 1934-1953), the ledge ring and the pit
+    // (z 6.4-7.6) round (1961.9, -431.6), r 27 (NAVMESH maps3).
+    constexpr uint32 GO_HERODS_DOOR = 101854;
+    constexpr uint32 GO_HERODS_LEVER = 101855;
+    constexpr float HEROD_X = 1965.09f;
+    constexpr float HEROD_Y = -431.61f;
+    constexpr float HEROD_Z = 6.26f;
+    constexpr float HERODS_DOOR_X = 1933.69f;
+    constexpr float HERODS_DOOR_Y = -431.654f;
+    constexpr float HERODS_DOOR_Z = 18.671f;
+
+    // --- section 4: the Last Stand (D13) and Whitemane's vigil (D14) -------
+    // The keyless Chapel Door starts the Last Stand (go_sm_chapel_door), so only
+    // event EVENT_LAST_STAND opens it: the door and the lever 4 yd inside are
+    // navigation-ignored (DcEventDoorRegistry). The objective stands on the
+    // landing outside the door, 8 yd west of it in the 9-10 yd opening; the
+    // landing's four door Centurions (11-17 yd from that spot) die first, then
+    // the door, then the group holds in the nave's center aisle (the r 9.7 disc
+    // at (1104.8, 1399.2), 49 yd from Mograine on the altar steps, outside every
+    // AoE that could wake him early) until slot 5 reads DONE. The companies march
+    // to the group (nearest tank first); Mograine comes down after the third.
+    constexpr uint32 EVENT_LAST_STAND = 2;      // event 1 is the room-aggro pre-clear
+    constexpr uint32 OBJ_LAST_STAND = 1;
+    constexpr uint32 GO_CHAPEL_DOOR = 104591;
+    constexpr uint32 GO_CHAPEL_LEVER = 104589;
+    constexpr uint32 GO_HIGH_INQUISITOR_DOOR = 104600;
+    constexpr float CHAPEL_DOOR_X = 1069.95f;
+    constexpr float CHAPEL_DOOR_Y = 1399.14f;
+    constexpr float CHAPEL_DOOR_Z = 30.80f;
+    constexpr float LANDING_X = 1062.0f;
+    constexpr float LANDING_Y = 1399.1f;
+    constexpr float LANDING_Z = 30.85f;
+    constexpr float LANDING_ARRIVE_RADIUS = 6.0f;
+    constexpr float LANDING_CLEAR_RADIUS = 20.0f;
+    constexpr float LANDING_CLEAR_Z_BAND = 3.0f;
+    constexpr float NAVE_HOLD_X = 1104.8f;
+    constexpr float NAVE_HOLD_Y = 1399.2f;
+    constexpr float NAVE_HOLD_Z = 31.0f;
+    constexpr float NAVE_HOLD_RADIUS = 8.0f;
+    // The crossing strip (S0): a living player in it restarts a wiped stand while
+    // the door stands open; the walk from the door to the hold crosses it.
+    constexpr float CROSSING_MIN_X = 1074.0f;
+    constexpr float CROSSING_MAX_X = 1082.0f;
+    constexpr float CROSSING_MIN_Y = 1392.0f;
+    constexpr float CROSSING_MAX_Y = 1406.0f;
+    constexpr float MOGRAINE_X = 1153.87f;
+    constexpr float MOGRAINE_Y = 1398.39f;
+    // Three companies, his descent and a wipe-and-rerun (D13 times a company at
+    // up to 30 s plus the 8-17 s march).
+    constexpr uint32 LAST_STAND_TIMEOUT_MS = 900000;
+    // Whitemane walks out when the stand is DONE and kneels at the vigil on the
+    // crossing, passive; any damage pulls her (D14). Her DB spawn is in her
+    // chamber behind the High Inquisitor's Door, so the roster anchors her here.
+    constexpr float VIGIL_X = 1146.0f;
+    constexpr float VIGIL_Y = 1398.0f;
+    constexpr float VIGIL_Z = 32.1f;
+}
+
 // Blackrock Depths (map 230) — the numbers BlackrockDepthsEvents.cpp's
 // events, hooks and roster patch share with the gtests (t/TestDungeonEvent,
 // t/TestBlackrockDepthsRouteProbe). The reasoning for each is in that file.
