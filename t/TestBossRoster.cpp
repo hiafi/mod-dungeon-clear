@@ -7,10 +7,15 @@
 
 #include <algorithm>
 #include <cmath>
+#include <optional>
+#include <vector>
 
 #include "Ai/Dungeon/DungeonClear/Data/DungeonBossInfo.h"
 #include "Ai/Dungeon/DungeonClear/Data/DungeonEventRegistry.h"
+#include "Ai/Dungeon/DungeonClear/Data/Events/DungeonEventTables.h"
 #include "Ai/Dungeon/DungeonClear/Overrides/BossRosterRegistry.h"
+#include "Ai/Dungeon/DungeonClear/Util/DcBossStandDown.h"
+#include "Ai/Dungeon/DungeonClear/Util/DcBossOrdering.h"
 
 namespace
 {
@@ -37,6 +42,7 @@ namespace
 
 TEST(BossRosterRegistryTest, HasPatchOnlyForPatchedMaps)
 {
+    EXPECT_TRUE(BossRosterRegistry::HasPatch(389));   // Ragefire Chasm — Taragaman last
     EXPECT_TRUE(BossRosterRegistry::HasPatch(189));   // Scarlet Monastery
     EXPECT_TRUE(BossRosterRegistry::HasPatch(109));   // Sunken Temple
     EXPECT_TRUE(BossRosterRegistry::HasPatch(209));   // ZulFarrak
@@ -1813,4 +1819,143 @@ TEST(BossRosterDoneTest, RosterPatchCarriesInstanceDataThroughApply)
     EXPECT_EQ(o->doneInstanceDataId, 9);
     EXPECT_EQ(o->doneInstanceDataValue, 3u);
     EXPECT_EQ(o->doneBossStateIndex, -1);
+}
+
+// --- Ragefire Chasm (389), the rework ---------------------------------------
+namespace
+{
+    // BossSpawnIndex's derived list: the four kill credits by DBC bit, so
+    // Taragaman is second.
+    std::vector<DungeonBossInfo> RagefireDerived()
+    {
+        namespace R = DcRagefireChasm;
+        return {
+            Boss(R::NPC_OGGLEFLINT, R::BIT_OGGLEFLINT, "Oggleflint", R::MAP_ID),
+            Boss(R::NPC_TARAGAMAN, R::BIT_TARAGAMAN, "Taragaman the Hungerer", R::MAP_ID),
+            Boss(R::NPC_JERGOSH, R::BIT_JERGOSH, "Jergosh the Invoker", R::MAP_ID),
+            Boss(R::NPC_BAZZALAN, R::BIT_BAZZALAN, "Bazzalan", R::MAP_ID),
+        };
+    }
+}
+
+// Taragaman is dormant until the other three are dead, so every run takes him
+// last; the DBC bits, which the kill mask reads, stay. Normal and heroic alike
+// (the heroic bodies keep the normal entries and bits).
+TEST(BossRosterRegistryTest, RagefireTaragamanIsLastOnBothDifficulties)
+{
+    namespace R = DcRagefireChasm;
+    uint32 const ramp = BossRosterRegistry::ObjectiveEntry(R::OBJ_HALL_RAMP);
+    uint32 const bank = BossRosterRegistry::ObjectiveEntry(R::OBJ_WEST_BANK);
+    for (Difficulty d : { DUNGEON_DIFFICULTY_NORMAL, DUNGEON_DIFFICULTY_HEROIC })
+    {
+        std::vector<DungeonBossInfo> const out =
+            BossRosterRegistry::Apply(R::MAP_ID, DcDiffKey::Dungeon(d), RagefireDerived());
+        std::vector<uint32> order;
+        for (DungeonBossInfo const& b : out)
+            order.push_back(b.entry);
+        EXPECT_EQ(order, (std::vector<uint32>{ R::NPC_OGGLEFLINT, R::NPC_JERGOSH, ramp, R::NPC_BAZZALAN, bank,
+                                               R::NPC_TARAGAMAN }));
+        for (DungeonBossInfo const& b : RagefireDerived())
+        {
+            DungeonBossInfo const* kept = Find(out, b.entry);
+            ASSERT_NE(kept, nullptr) << b.entry;
+            EXPECT_EQ(kept->encounterIndex, b.encounterIndex) << b.entry;
+            EXPECT_EQ(kept->kind, DungeonAnchorKind::Boss) << b.entry;
+        }
+    }
+}
+
+// The picker's walk through that list: each target is finished before the next,
+// the hall ramp comes before Bazzalan and the west bank between him and Taragaman,
+// and the list is a prefix rule, not a distance rule (Taragaman is the nearest boss
+// to Bazzalan's exit).
+TEST(BossRosterRegistryTest, RagefirePickerWalksTheKillOrder)
+{
+    namespace R = DcRagefireChasm;
+    uint32 const ramp = BossRosterRegistry::ObjectiveEntry(R::OBJ_HALL_RAMP);
+    uint32 const bank = BossRosterRegistry::ObjectiveEntry(R::OBJ_WEST_BANK);
+    std::vector<DungeonBossInfo> cands = BossRosterRegistry::Apply(
+        R::MAP_ID, DcDiffKey::Dungeon(DUNGEON_DIFFICULTY_NORMAL), RagefireDerived());
+
+    std::vector<uint32> walk;
+    uint32 sticky = 0, stickyKey = 0;
+    while (!cands.empty())
+    {
+        std::optional<DungeonBossInfo> const pick = DcBossOrdering::PickTarget(cands, sticky, stickyKey, sticky != 0);
+        ASSERT_TRUE(pick.has_value());
+        // Commit and hold: the same pick while it stands.
+        EXPECT_EQ(DcBossOrdering::PickTarget(cands, pick->entry, BossOrderKey(*pick), true)->entry, pick->entry);
+        walk.push_back(pick->entry);
+        sticky = pick->entry;
+        stickyKey = BossOrderKey(*pick);
+        cands.erase(std::find_if(cands.begin(), cands.end(),
+                                 [&](DungeonBossInfo const& b) { return b.entry == sticky; }));
+    }
+    EXPECT_EQ(walk, (std::vector<uint32>{ R::NPC_OGGLEFLINT, R::NPC_JERGOSH, ramp, R::NPC_BAZZALAN, bank,
+                                          R::NPC_TARAGAMAN }));
+}
+
+// The west bank: a plain travel objective (no event, no hook, no gate creature),
+// done on arrival or when Taragaman's own slot reads DONE.
+TEST(BossRosterRegistryTest, RagefireWestBankIsAPlainTravelObjective)
+{
+    namespace R = DcRagefireChasm;
+    std::vector<DungeonBossInfo> const out = BossRosterRegistry::Apply(
+        R::MAP_ID, DcDiffKey::Dungeon(DUNGEON_DIFFICULTY_NORMAL), RagefireDerived());
+    DungeonBossInfo const* bank = Find(out, BossRosterRegistry::ObjectiveEntry(R::OBJ_WEST_BANK));
+    ASSERT_NE(bank, nullptr);
+    EXPECT_EQ(bank->kind, DungeonAnchorKind::Objective);
+    EXPECT_EQ(bank->eventId, 0u);
+    EXPECT_EQ(bank->onArriveHook, 0u);
+    EXPECT_EQ(bank->gateEntry, 0u);
+    EXPECT_EQ(bank->doneBossStateIndex, R::SLOT_TARAGAMAN);
+    EXPECT_FLOAT_EQ(bank->x, R::WEST_BANK_X);
+    EXPECT_FLOAT_EQ(bank->y, R::WEST_BANK_Y);
+    // Out of his aggro and of the plateau pre-clear's radius round his spawn.
+    EXPECT_GT(std::hypot(bank->x + 244.74f, bank->y - 150.09f), R::PLATEAU_ROOM_RADIUS);
+}
+
+// The hall ramp: the same kind, done on arrival or when Bazzalan's slot reads DONE.
+TEST(BossRosterRegistryTest, RagefireHallRampIsAPlainTravelObjective)
+{
+    namespace R = DcRagefireChasm;
+    for (Difficulty d : { DUNGEON_DIFFICULTY_NORMAL, DUNGEON_DIFFICULTY_HEROIC })
+    {
+        std::vector<DungeonBossInfo> const out =
+            BossRosterRegistry::Apply(R::MAP_ID, DcDiffKey::Dungeon(d), RagefireDerived());
+        DungeonBossInfo const* ramp = Find(out, BossRosterRegistry::ObjectiveEntry(R::OBJ_HALL_RAMP));
+        ASSERT_NE(ramp, nullptr);
+        EXPECT_EQ(ramp->kind, DungeonAnchorKind::Objective);
+        EXPECT_EQ(ramp->eventId, 0u);
+        EXPECT_EQ(ramp->onArriveHook, 0u);
+        EXPECT_EQ(ramp->gateEntry, 0u);
+        EXPECT_EQ(ramp->doneBossStateIndex, R::SLOT_BAZZALAN);
+        EXPECT_FLOAT_EQ(ramp->x, R::HALL_RAMP_X);
+        EXPECT_FLOAT_EQ(ramp->y, R::HALL_RAMP_Y);
+        EXPECT_FLOAT_EQ(ramp->arriveRadius, R::HALL_RAMP_ARRIVE_RADIUS);
+    }
+}
+
+// Bazzalan's heroic chain (2s bar + 7.5s) and Taragaman's casts leave them passive with
+// no victim while the fight goes on, and a boss with no victim does not hold the
+// stuck-combat breaker. Their objectives' slots do, exactly while one reads IN_PROGRESS.
+TEST(BossRosterRegistryTest, RagefireVictimlessHoldsAreNotTheFightsEnd)
+{
+    namespace R = DcRagefireChasm;
+    EXPECT_FALSE(DcBossStandDown::HoldsFiveManBossFight(true, true, true, false, /*victimIsOtherMember*/ false));
+
+    std::vector<DungeonBossInfo> const out = BossRosterRegistry::Apply(
+        R::MAP_ID, DcDiffKey::Dungeon(DUNGEON_DIFFICULTY_HEROIC), RagefireDerived());
+    auto const live = [&out](int32 slotInProgress)
+    {
+        return std::any_of(out.begin(), out.end(), [slotInProgress](DungeonBossInfo const& b)
+        {
+            uint32 const state = b.doneBossStateIndex == slotInProgress ? DcBossStandDown::kEncounterInProgress : 0u;
+            return DcBossStandDown::ObjectiveEncounterLive(b.kind == DungeonAnchorKind::Objective,
+                                                           b.doneBossStateIndex, state);
+        });
+    };
+    EXPECT_TRUE(live(R::SLOT_BAZZALAN));
+    EXPECT_TRUE(live(R::SLOT_TARAGAMAN));
+    EXPECT_FALSE(live(/*nothing in progress*/ 99));
 }

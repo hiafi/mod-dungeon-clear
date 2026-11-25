@@ -76,7 +76,7 @@ namespace
             if (e.heroic && row->heroicLevel == 0)
             {
                 *err = "'" + std::string(row->token) +
-                       "' has no heroic mode (classic dungeons have none)";
+                       "' has no heroic mode (its row offers none)";
                 return false;
             }
 

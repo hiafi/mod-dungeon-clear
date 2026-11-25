@@ -199,6 +199,30 @@ TEST(DcNavPenaltyRegistry, FencesTheRagefireChasmFunnelWall)
     EXPECT_FLOAT_EQ(DcNavPenaltyRegistry::PenaltyAt(0, -271.13f, -20.04f, -57.4f), 1.0f);
 }
 
+TEST(DcNavPenaltyRegistry, TheRagefireFunnelWallLeavesTheWayToOggleflint)
+{
+    // The rework run starts with the den branch. The wall fences the lip the
+    // unfenced route drops over (mid-crossing, and the point it is crossed at) ...
+    EXPECT_GT(DcNavPenaltyRegistry::PenaltyAt(389, -250.2f, -21.0f, -56.9f), 1.0f);
+    EXPECT_GT(DcNavPenaltyRegistry::PenaltyAt(389, -248.8f, -21.2f, -57.3f), 1.0f);
+    // ... and leaves the routed way: the trogg chamber, round the rib's west end,
+    // and east along the pocket to the den's ramp (the corridor of the Tier-2
+    // probe, t/TestRfcRouteProbe.cpp).
+    struct Spot { float x, y, z; };
+    for (Spot const& s : { Spot{ -246.5f, -39.6f, -58.1f }, Spot{ -270.5f, -41.1f, -60.1f },
+                           Spot{ -289.7f, -42.8f, -60.2f }, Spot{ -286.8f, -35.4f, -59.7f },
+                           Spot{ -283.9f, -27.9f, -58.9f }, Spot{ -281.1f, -20.4f, -60.0f },
+                           Spot{ -276.1f, -14.8f, -61.7f }, Spot{ -261.1f, -10.4f, -60.8f },
+                           Spot{ -241.1f, -9.1f, -59.8f }, Spot{ -209.6f, -3.7f, -61.0f } })
+        EXPECT_FLOAT_EQ(DcNavPenaltyRegistry::PenaltyAt(389, s.x, s.y, s.z), 1.0f) << s.x << ", " << s.y;
+    // No boss, the checkpoint or a travel objective stands in a row.
+    for (Spot const& s : { Spot{ -147.55f, 38.71f, -38.8f }, Spot{ -376.81f, 209.22f, -21.8f },
+                           Spot{ -384.87f, 146.04f, 7.82f }, Spot{ -244.74f, 150.09f, -18.75f },
+                           Spot{ -154.8f, 70.2f, -21.1f }, Spot{ -304.0f, 140.0f, -24.4f },
+                           Spot{ -325.0f, 244.0f, -10.4f } })
+        EXPECT_FALSE(DcNavPenaltyRegistry::IsInsideRegion(389, s.x, s.y, s.z)) << s.x << ", " << s.y;
+}
+
 TEST(DcNavPenaltyRegistry, FencesTheWailingCavernsShortcutWall)
 {
     // Both stitched climbs onto the west plateau are taxed. The reported ramp

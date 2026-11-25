@@ -88,9 +88,10 @@ namespace DcTestDungeonRegistry
         char const* wing;         // wing label for split maps, "" otherwise
         // Default bot level for a HEROIC run, and the "heroic offered" flag in
         // one: 0 = no heroic mode for this row. TBC rows carry 70, WotLK rows
-        // 80. Classic dungeons have no heroic mode at all, so they stay 0 and
-        // this stays a trailing member — those rows need no edit
-        // (value-initialized).
+        // 80. Classic dungeons have none in the stock game and stay 0, so this
+        // stays a trailing member — those rows need no edit (value-initialized).
+        // A classic dungeon whose rework ships a heroic difficulty carries 60
+        // once its bot clear is offered (Ragefire Chasm).
         std::uint32_t heroicLevel = 0;
 
         // --- SCENARIO fields (Karazhan chess plan, T1) ---------------------
@@ -122,7 +123,10 @@ namespace DcTestDungeonRegistry
         std::uint32_t successGraceS = 0;
 
         // Per-row overrides of DungeonClear.TestRun.OverallTimeoutS /
-        // NoProgressS; 0 = the global value. A long scripted event (chess:
+        // NoProgressS; 0 = the global value. NoProgressS is the longest stretch with
+        // no sign of life at all (DcTestRunJob: a kill or objective, combat entered or
+        // left, a new victim, its health moving, the next anchor closer, an event's
+        // progress bump), not the time between two kills. A long scripted event (chess:
         // ~1800 / 300) wants its own watchdog budget without loosening every
         // other run's.
         std::uint32_t overallTimeoutS = 0;

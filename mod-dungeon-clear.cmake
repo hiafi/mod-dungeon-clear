@@ -139,6 +139,7 @@ if (BUILD_TESTING)
             "${MOD_PATH}/t/TestHallsOfReflectionRouteProbe.cpp"
             "${MOD_PATH}/t/TestCullingOfStratholmeRouteProbe.cpp"
             "${MOD_PATH}/t/TestBlackrockDepthsRouteProbe.cpp"
+            "${MOD_PATH}/t/TestRfcRouteProbe.cpp"
             "${MOD_PATH}/t/TestBlackrockSpireEvents.cpp"
             "${MOD_PATH}/t/TestBlackrockSpireRouteProbe.cpp"
             "${MOD_PATH}/t/TestTrialOfTheChampionRouteProbe.cpp"

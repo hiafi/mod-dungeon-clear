@@ -44,7 +44,9 @@ TEST(DcTestDungeonRegistryTest, HeroicLevelMatchesTheExpansionCap)
 {
     // heroicLevel is both the heroic default level AND the "heroic offered"
     // gate, and a heroic run is run at its expansion's cap: TBC rows carry 70,
-    // WotLK rows 80. Classic dungeons have no heroic difficulty, so 0.
+    // WotLK rows 80. Classic dungeons have no stock heroic difficulty, so 0,
+    // except a rework whose heroic is offered to the bots: the classic cap, 60.
+    std::set<std::uint32_t> const classicHeroicMaps = {389};  // Ragefire Chasm
     std::set<std::uint32_t> const tbcMaps =
         {543, 542, 547, 546, 557, 558, 556, 560, 555, 545, 540, 269, 553, 554, 552, 585};
     std::set<std::uint32_t> const wotlkMaps =
@@ -55,6 +57,8 @@ TEST(DcTestDungeonRegistryTest, HeroicLevelMatchesTheExpansionCap)
             EXPECT_EQ(row.heroicLevel, 70u) << row.token;
         else if (wotlkMaps.count(row.mapId))
             EXPECT_EQ(row.heroicLevel, 80u) << row.token;
+        else if (classicHeroicMaps.count(row.mapId))
+            EXPECT_EQ(row.heroicLevel, 60u) << row.token;
         else
             EXPECT_EQ(row.heroicLevel, 0u) << row.token;
     }
@@ -66,6 +70,25 @@ TEST(DcTestDungeonRegistryTest, FindByToken)
     ASSERT_NE(row, nullptr);
     EXPECT_EQ(row->mapId, 36u);
     EXPECT_STREQ(row->wing, "");
+}
+
+TEST(DcTestDungeonRegistryTest, RagefireChasmRunsAtSeventeenAndHeroicAtSixty)
+{
+    // The bosses are level 16 (heroic 60). One section: the whole map, entering
+    // where the Finder does (areatrigger 2230; there is no lfg_dungeon_template row).
+    Row const* row = Find("rfc");
+    ASSERT_NE(row, nullptr);
+    EXPECT_EQ(row->mapId, 389u);
+    EXPECT_EQ(row->recommendedLevel, 17u);
+    EXPECT_EQ(row->heroicLevel, 60u);
+    EXPECT_STREQ(row->wing, "");
+    EXPECT_NEAR(row->x, 3.81f, 0.01f);
+    EXPECT_NEAR(row->y, -14.82f, 0.01f);
+    // The global 600s: the 800yd trash leg to Jergosh re-arms the clock pull by pull.
+    EXPECT_EQ(row->noProgressS, 0u);
+    EXPECT_EQ(row->overallTimeoutS, 0u);
+    EXPECT_EQ(Find("389"), row);
+    EXPECT_EQ(DungeonWingRegistry::Get(389), nullptr);
 }
 
 TEST(DcTestDungeonRegistryTest, FindByNumericMapId)
