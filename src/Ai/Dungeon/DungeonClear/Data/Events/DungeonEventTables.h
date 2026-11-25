@@ -63,6 +63,7 @@ void RegisterSunkenTempleEvents(std::vector<DungeonEvent>& out);
 void RegisterZulFarrakEvents(std::vector<DungeonEvent>& out);
 void RegisterShadowfangKeepEvents(std::vector<DungeonEvent>& out);
 void RegisterScarletMonasteryEvents(std::vector<DungeonEvent>& out);
+void RegisterRagefireChasmEvents(std::vector<DungeonEvent>& out);
 void RegisterRazorfenDownsEvents(std::vector<DungeonEvent>& out);
 void RegisterBlackrockDepthsEvents(std::vector<DungeonEvent>& out);
 void RegisterBlackrockSpireEvents(std::vector<DungeonEvent>& out);
@@ -98,6 +99,95 @@ namespace DcHellfireRamparts
     constexpr float FINAL_APPROACH_SCAN = 45.0f;
     // Floor Z the bot must be above: the upper level the final platform sits on.
     constexpr float FINAL_APPROACH_MIN_Z = 76.0f;
+}
+
+// Ragefire Chasm (map 389), the rework: the kill order, the room pre-clears and
+// the objects a bot never clicks, shared with the gtests. The reasoning is in
+// RagefireChasmEvents.cpp; distances are measured from the live spawns.
+namespace DcRagefireChasm
+{
+    constexpr uint32 MAP_ID = 389;
+
+    constexpr uint32 NPC_OGGLEFLINT = 11517;
+    constexpr uint32 NPC_JERGOSH    = 11518;
+    constexpr uint32 NPC_BAZZALAN   = 11519;
+    constexpr uint32 NPC_TARAGAMAN  = 11520;
+
+    // DungeonEncounter.dbc bits (the heroic copies 1095-1098 keep them). They put
+    // Taragaman, the gated end boss, second.
+    constexpr uint32 BIT_OGGLEFLINT = 0;
+    constexpr uint32 BIT_TARAGAMAN  = 1;
+    constexpr uint32 BIT_JERGOSH    = 2;
+    constexpr uint32 BIT_BAZZALAN   = 3;
+
+    // Clear order. The hall ramp objective shares Bazzalan's key and the west bank
+    // objective Taragaman's: an objective sorts before a boss at the same key, and
+    // the picker finishes same-key siblings before it moves on.
+    constexpr int32 ORDER_OGGLEFLINT = 1;
+    constexpr int32 ORDER_JERGOSH    = 2;
+    constexpr int32 ORDER_BAZZALAN   = 3;
+    constexpr int32 ORDER_TARAGAMAN  = 4;
+
+    // Boss state slots in the rework instance (kill order, not bits).
+    constexpr int32 SLOT_BAZZALAN  = 2;
+    constexpr int32 SLOT_TARAGAMAN = 3;
+
+    constexpr uint32 EVENT_ROOM_AGGRO = 1;
+
+    // The west bank, 60yd of walking from his hub (see the roster patch).
+    constexpr uint32 OBJ_WEST_BANK = 1;
+    constexpr float  WEST_BANK_X = -304.0f;
+    constexpr float  WEST_BANK_Y = 140.0f;
+    constexpr float  WEST_BANK_Z = -24.4f;
+    constexpr float  WEST_BANK_ARRIVE_RADIUS = 6.0f;
+
+    // The top of the hall's north-east ramp, where it meets the north shelf.
+    constexpr uint32 OBJ_HALL_RAMP = 2;
+    constexpr float  HALL_RAMP_X = -325.0f;
+    constexpr float  HALL_RAMP_Y = 244.0f;
+    constexpr float  HALL_RAMP_Z = -10.4f;
+    constexpr float  HALL_RAMP_ARRIVE_RADIUS = 4.0f;
+
+    // Room pre-clears (RoomAggroRegistry): each pull-out sits under the closest
+    // the room's units ever come to their boss (spawn distance less wander), so
+    // all of them are pulled away before him. He neither calls nor answers
+    // assistance and notices at 12yd (rework flags_extra / detection).
+    //   Den: the Shaman 11.5yd out (wander 2) and the Trogg 12.5. The neck's pair
+    //     (35 / 38yd) stands on the only way in.
+    constexpr float DEN_ROOM_RADIUS  = 20.0f;
+    constexpr float DEN_ROOM_PULLOUT = 9.0f;
+    //   Hall: Cultists 7.7 and 8.4yd out (wander 2: 5.7 at the closest, hence
+    //     5.5), the Orb neck's three and the east half's two 30-37yd out, the two
+    //     Enforcers by the wisps' offering spot 43.2 / 47.1. The Y band leaves
+    //     out the north shelf 17yd up (y 239 on): that is the walk to Bazzalan.
+    constexpr float HALL_ROOM_RADIUS  = 50.0f;
+    constexpr float HALL_ROOM_PULLOUT = 5.5f;
+    constexpr float HALL_ROOM_MIN_Y   = 165.0f;
+    constexpr float HALL_ROOM_MAX_Y   = 236.0f;
+    //   Ridge: Cultists 10.6 (wander 2: 8.6) and 12.4yd out and the neck's two
+    //     Enforcers 40.7 / 41.7; short of the hall neck 30yd below (44.4).
+    constexpr float RIDGE_ROOM_RADIUS  = 43.0f;
+    constexpr float RIDGE_ROOM_PULLOUT = 8.0f;
+    //   Plateau: the Enforcer patrol 48707 (a ping-pong across the hub, 7.1yd
+    //     from Taragaman at the closest, 46.0 at its far +x end) and the -x arm
+    //     foot's two Enforcers (39.6 / 39.9yd). Every other arm end's guards are
+    //     out (y 106-111 and 191-193 by the band, the +x pair by the radius, 46.2
+    //     / 46.9): they stand 6yd below him at the far arms, out of his reach,
+    //     and the only way to them crosses his hub.
+    constexpr float PLATEAU_ROOM_RADIUS  = 46.1f;
+    constexpr float PLATEAU_ROOM_PULLOUT = 6.0f;
+    constexpr float PLATEAU_ROOM_MIN_Y   = 135.0f;
+    constexpr float PLATEAU_ROOM_MAX_Y   = 175.0f;
+
+    // Never clicked: the stock Blood Filled Orb (Zelemar's quest), the heroic
+    // hard mode's Blood Shrine and pour spot (a human's choice; goobers, type 10,
+    // no lock, spawned on heroic only) and Taragaman's Searing Spike (generic,
+    // type 5, not selectable, up for a Nova only). None is a door (0) or a chest
+    // (3), so none is a door blocker, a loot target or an event's object.
+    constexpr uint32 GO_BLOOD_FILLED_ORB = 182024;
+    constexpr uint32 GO_BLOOD_SHRINE     = 301340;
+    constexpr uint32 GO_POUR_SPOT        = 301341;
+    constexpr uint32 GO_SEARING_SPIKE    = 301342;
 }
 
 // Scarlet Monastery (map 189) — the numbers ScarletMonasteryEvents.cpp's roster
@@ -6200,6 +6290,7 @@ std::vector<uint32> const& VioletHoldPrisonerEntries();
 // roster appear here (e.g. Shadowfang Keep / Blood Furnace have events but no
 // patch, so no roster appender).
 void RegisterScarletMonasteryRoster(std::vector<BossRosterPatch>& t);
+void RegisterRagefireChasmRoster(std::vector<BossRosterPatch>& t);
 void RegisterScholomanceRoster(std::vector<BossRosterPatch>& t);
 void RegisterSunkenTempleRoster(std::vector<BossRosterPatch>& t);
 void RegisterRazorfenDownsRoster(std::vector<BossRosterPatch>& t);

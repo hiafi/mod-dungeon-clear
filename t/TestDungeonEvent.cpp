@@ -2132,6 +2132,38 @@ TEST(DungeonEventScarletMonastery, LastStandOpensTheChapelDoorAndHoldsTheNave)
     EXPECT_TRUE(DcEventDoorRegistry::IsKeyExempt(S::GO_HERODS_DOOR));
 }
 
+// Ragefire Chasm (389): the room pre-clear gate and nothing else. No event step
+// names an object, so the heroic hard mode's Blood Shrine and pour spot, the stock
+// Orb and the Searing Spike are never clicked; none of them is a door either, so
+// no door rule may ever name one.
+TEST(DungeonEventRagefireChasm, OnlyTheRoomGateAndNoObjectIsEverClicked)
+{
+    namespace R = DcRagefireChasm;
+    std::size_t count = 0;
+    for (DungeonEvent const& e : DungeonEventRegistry::AllEvents())
+    {
+        if (e.mapId != R::MAP_ID)
+            continue;
+        ++count;
+        EXPECT_EQ(e.id, R::EVENT_ROOM_AGGRO);
+        EXPECT_TRUE(DungeonEventRegistry::IsRoomAggroPreClear(e));
+        EXPECT_TRUE(static_cast<bool>(e.condition));
+        EXPECT_TRUE(e.required);
+        EXPECT_EQ(e.gate, DcDifficultyGate::Any);
+        for (EventStep const& step : e.steps)
+            EXPECT_EQ(step.goEntry, 0u) << e.id;
+    }
+    EXPECT_EQ(count, 1u);
+    EXPECT_TRUE(DungeonEventRegistry::HasRoomAggroEvent(R::MAP_ID));
+
+    for (uint32 go : { R::GO_BLOOD_FILLED_ORB, R::GO_BLOOD_SHRINE, R::GO_POUR_SPOT, R::GO_SEARING_SPIKE })
+    {
+        EXPECT_FALSE(DcEventDoorRegistry::IsNavigationIgnored(go)) << go;
+        EXPECT_FALSE(DcEventDoorRegistry::IsScriptOnly(go)) << go;
+        EXPECT_FALSE(DcEventDoorRegistry::IsKeyExempt(go)) << go;
+    }
+}
+
 // Scholomance (289) has no event rows: the Viewing Room students are unattackable
 // props, so the Marduk & Vectus room-aggro pre-clear is gone. Nothing for the
 // clear to click either (the hard mode goobers are human-started).

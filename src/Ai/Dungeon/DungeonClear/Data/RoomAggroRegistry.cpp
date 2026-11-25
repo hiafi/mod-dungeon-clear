@@ -7,6 +7,8 @@
 
 #include <algorithm>
 
+#include "Ai/Dungeon/DungeonClear/Data/Events/DungeonEventTables.h"
+
 namespace
 {
     // Tier-1 MVP scope (deployment-files/docs/mod-dungeon-clear_room-aggro-bosses
@@ -85,6 +87,24 @@ namespace
         { 189, 300940, 37.0f, {}, false, 0.0f, 0.0f, /*pullOutRadius*/ 9.0f },    // Forgemaster Crell
         { 189, 300942, 28.0f, {}, false, 0.0f, 0.0f, /*pullOutRadius*/ 9.0f },    // Drillmaster Halden
         { 189, 300946, 40.0f, {}, false, 0.0f, 0.0f, /*pullOutRadius*/ 12.0f },   // Brother Aldous Thorne
+
+        // Ragefire Chasm (389), the rework. Not script radii either: the bosses call
+        // and answer no assistance, and these rows keep the fight off the rooms'
+        // trash (Oggleflint's den, Jergosh's hall with the neck and the offering
+        // spot, Bazzalan's ridge, and before Taragaman the Enforcer patrol that
+        // crosses his hub). The numbers are DcRagefireChasm::*_ROOM_*. Each
+        // pull-out is under the closest its room's units ever come to the boss, so
+        // none "comes with him" and all are dragged out (the advanced pull it forces).
+        { DcRagefireChasm::MAP_ID, DcRagefireChasm::NPC_OGGLEFLINT, DcRagefireChasm::DEN_ROOM_RADIUS, {}, false, 0.0f,
+          0.0f, DcRagefireChasm::DEN_ROOM_PULLOUT },
+        { DcRagefireChasm::MAP_ID, DcRagefireChasm::NPC_JERGOSH, DcRagefireChasm::HALL_ROOM_RADIUS, {},
+          /*hasYBand*/ true, DcRagefireChasm::HALL_ROOM_MIN_Y, DcRagefireChasm::HALL_ROOM_MAX_Y,
+          DcRagefireChasm::HALL_ROOM_PULLOUT },
+        { DcRagefireChasm::MAP_ID, DcRagefireChasm::NPC_BAZZALAN, DcRagefireChasm::RIDGE_ROOM_RADIUS, {}, false, 0.0f,
+          0.0f, DcRagefireChasm::RIDGE_ROOM_PULLOUT },
+        { DcRagefireChasm::MAP_ID, DcRagefireChasm::NPC_TARAGAMAN, DcRagefireChasm::PLATEAU_ROOM_RADIUS, {},
+          /*hasYBand*/ true, DcRagefireChasm::PLATEAU_ROOM_MIN_Y, DcRagefireChasm::PLATEAU_ROOM_MAX_Y,
+          DcRagefireChasm::PLATEAU_ROOM_PULLOUT },
 
         // Scholomance (289) has no row: the Marduk / Vectus students are
         // unattackable props now, so there is no room to clear (see

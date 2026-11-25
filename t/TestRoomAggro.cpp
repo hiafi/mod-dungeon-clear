@@ -3,7 +3,9 @@
  * and/or modify it under version 3 of the License, or (at your option), any later version.
  */
 
+#include <algorithm>
 #include <cmath>
+#include <vector>
 
 #include "gtest/gtest.h"
 #include "Ai/Dungeon/DungeonClear/Data/RoomAggroRegistry.h"
@@ -689,4 +691,144 @@ TEST(RoomAggroRegistryTest, KarazhanMoroesCampStaysInTheHall)
     float const cx = -10975.0f, cy = -1935.0f;
     EXPECT_TRUE(RoomAggroRegistry::InCampBox(*m, cx, cy));
     EXPECT_GE(std::hypot(cx - mx, cy - my), RoomAggroRegistry::SkirtOverride(532, 15687));
+}
+
+// --- Ragefire Chasm (389), the rework --------------------------------------
+// Live spawns (acore_world.creature, 2026-11-24): position and wander distance.
+namespace
+{
+    struct RagefireSpawn { uint32 guid; float x, y, z, wander; };
+    struct RagefirePos { float x, y, z; };
+
+    constexpr RagefirePos RFC_OGGLEFLINT = { -147.55f, 38.71f, -38.80f };
+    constexpr RagefirePos RFC_JERGOSH    = { -376.81f, 209.22f, -21.80f };
+    constexpr RagefirePos RFC_BAZZALAN   = { -384.87f, 146.04f, 7.82f };
+    constexpr RagefirePos RFC_TARAGAMAN  = { -244.74f, 150.09f, -18.75f };
+
+    float RagefireDist(RagefirePos const& a, RagefirePos const& b)
+    {
+        return std::sqrt((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y) + (a.z - b.z) * (a.z - b.z));
+    }
+
+    // Kept as room trash everywhere its wander takes it (both ends of it).
+    bool RagefireAlwaysKept(RoomAggroBoss const& r, RagefirePos const& boss, RagefireSpawn const& s)
+    {
+        float const d = RagefireDist(boss, { s.x, s.y, s.z });
+        return RoomAggroRegistry::InRoomBand(r, s.y) &&
+               RoomAggroRegistry::IsRoomTrash(r, 11322, d - s.wander, r.pullOutRadius) &&
+               RoomAggroRegistry::IsRoomTrash(r, 11322, d + s.wander, r.pullOutRadius);
+    }
+
+    bool RagefireKept(RoomAggroBoss const& r, RagefirePos const& boss, RagefirePos const& p)
+    {
+        return RoomAggroRegistry::InRoomBand(r, p.y) &&
+               RoomAggroRegistry::IsRoomTrash(r, 11322, RagefireDist(boss, p), r.pullOutRadius);
+    }
+
+    // Every pull-out is under the bosses' 12yd detection (so the kept units near
+    // them are dragged out, never fought inside it) and forces the advanced pull.
+    void RagefireRowIsSane(RoomAggroBoss const* r, float radius, float pullOut)
+    {
+        ASSERT_NE(r, nullptr);
+        EXPECT_FLOAT_EQ(r->radius, radius);
+        EXPECT_FLOAT_EQ(r->pullOutRadius, pullOut);
+        EXPECT_GT(r->pullOutRadius, 0.0f);
+        EXPECT_LT(r->pullOutRadius, 12.0f);
+        EXPECT_FLOAT_EQ(r->skirtRadius, 0.0f);
+        EXPECT_TRUE(r->memberEntries.empty());
+    }
+}
+
+TEST(RoomAggroRegistryTest, RagefireOggleflintClearsTheDen)
+{
+    namespace R = DcRagefireChasm;
+    RoomAggroBoss const* r = RoomAggroRegistry::Find(R::MAP_ID, R::NPC_OGGLEFLINT);
+    RagefireRowIsSane(r, R::DEN_ROOM_RADIUS, R::DEN_ROOM_PULLOUT);
+    for (RagefireSpawn const& s : { RagefireSpawn{ 48643, -148.04f, 27.19f, -38.85f, 2.0f },
+                                    RagefireSpawn{ 48645, -154.04f, 27.97f, -38.57f, 0.0f } })
+        EXPECT_TRUE(RagefireAlwaysKept(*r, RFC_OGGLEFLINT, s)) << s.guid;
+    // The up leg's Earthborer in the tunnel overhead and the neck's pair are not.
+    EXPECT_FALSE(RagefireKept(*r, RFC_OGGLEFLINT, { -168.54f, 13.33f, -29.62f }));
+    EXPECT_FALSE(RagefireKept(*r, RFC_OGGLEFLINT, { -152.45f, 3.91f, -40.59f }));
+}
+
+TEST(RoomAggroRegistryTest, RagefireJergoshClearsTheHall)
+{
+    namespace R = DcRagefireChasm;
+    RoomAggroBoss const* r = RoomAggroRegistry::Find(R::MAP_ID, R::NPC_JERGOSH);
+    RagefireRowIsSane(r, R::HALL_ROOM_RADIUS, R::HALL_ROOM_PULLOUT);
+    for (RagefireSpawn const& s : { RagefireSpawn{ 48737, -369.36f, 211.17f, -21.80f, 2.0f },    // 7.7
+                                    RagefireSpawn{ 48741, -374.13f, 201.24f, -21.80f, 2.0f },    // 8.4
+                                    RagefireSpawn{ 48744, -367.19f, 180.43f, -22.16f, 2.0f },    // the neck
+                                    RagefireSpawn{ 48739, -360.93f, 179.06f, -22.19f, 2.0f },
+                                    RagefireSpawn{ 48745, -367.06f, 173.70f, -22.01f, 2.0f },
+                                    RagefireSpawn{ 48732, -346.64f, 213.99f, -21.39f, 2.0f },    // the east half
+                                    RagefireSpawn{ 48728, -340.18f, 207.47f, -21.49f, 2.0f },
+                                    // the offering spot's Enforcers (a bot that catches a wisp late runs there)
+                                    RagefireSpawn{ 48731, -336.36f, 224.26f, -20.27f, 0.0f },
+                                    RagefireSpawn{ 48725, -329.78f, 210.64f, -19.92f, 0.0f } })
+        EXPECT_TRUE(RagefireAlwaysKept(*r, RFC_JERGOSH, s)) << s.guid;
+    // The north shelf, 17yd up, is the walk to Bazzalan.
+    for (RagefirePos const& p : { RagefirePos{ -385.12f, 239.62f, -4.85f }, RagefirePos{ -392.02f, 244.26f, -4.85f },
+                                  RagefirePos{ -367.59f, 254.25f, -5.05f } })
+        EXPECT_FALSE(RagefireKept(*r, RFC_JERGOSH, p)) << p.y;
+    // The strip's Warlock (61.7) is on the way in.
+    EXPECT_FALSE(RagefireKept(*r, RFC_JERGOSH, { -316.56f, 222.63f, -22.17f }));
+}
+
+TEST(RoomAggroRegistryTest, RagefireBazzalanClearsTheRidge)
+{
+    namespace R = DcRagefireChasm;
+    RoomAggroBoss const* r = RoomAggroRegistry::Find(R::MAP_ID, R::NPC_BAZZALAN);
+    RagefireRowIsSane(r, R::RIDGE_ROOM_RADIUS, R::RIDGE_ROOM_PULLOUT);
+    EXPECT_FALSE(r->hasYBand);
+    for (RagefireSpawn const& s : { RagefireSpawn{ 48749, -385.16f, 156.60f, 7.74f, 2.0f },
+                                    RagefireSpawn{ 48751, -396.31f, 150.83f, 7.82f, 2.0f },
+                                    RagefireSpawn{ 48747, -404.93f, 181.38f, 6.58f, 0.0f },
+                                    RagefireSpawn{ 48748, -412.36f, 177.34f, 6.71f, 0.0f } })
+        EXPECT_TRUE(RagefireAlwaysKept(*r, RFC_BAZZALAN, s)) << s.guid;
+    // The hall neck 30yd below.
+    EXPECT_FALSE(RagefireKept(*r, RFC_BAZZALAN, { -367.06f, 173.70f, -22.01f }));
+    EXPECT_FALSE(RagefireKept(*r, RFC_BAZZALAN, { -367.19f, 180.43f, -22.16f }));
+}
+
+TEST(RoomAggroRegistryTest, RagefireTaragamanTakesThePatrolAndTheWestArmFoot)
+{
+    namespace R = DcRagefireChasm;
+    RoomAggroBoss const* r = RoomAggroRegistry::Find(R::MAP_ID, R::NPC_TARAGAMAN);
+    RagefireRowIsSane(r, R::PLATEAU_ROOM_RADIUS, R::PLATEAU_ROOM_PULLOUT);
+
+    // The Enforcer patrol (waypoint path 487070, a closed ping-pong): room trash at
+    // every point of every leg, so the pull never opens while it is alive.
+    std::vector<RagefirePos> const path = {
+        { -263.52f, 150.47f, -19.00f }, { -275.88f, 149.00f, -22.23f }, { -283.07f, 148.15f, -25.43f },
+        { -275.88f, 149.00f, -22.23f }, { -263.52f, 150.47f, -19.00f }, { -247.89f, 140.20f, -18.57f },
+        { -225.04f, 153.12f, -19.04f }, { -212.73f, 154.86f, -21.48f }, { -199.50f, 155.41f, -25.24f },
+        { -212.73f, 154.86f, -21.48f }, { -225.04f, 153.12f, -19.04f }, { -240.89f, 165.03f, -18.55f },
+    };
+    float nearest = 100.0f;
+    for (std::size_t i = 0; i < path.size(); ++i)
+    {
+        RagefirePos const& a = path[i];
+        RagefirePos const& b = path[(i + 1) % path.size()];
+        for (int k = 0; k <= 40; ++k)
+        {
+            float const t = k / 40.0f;
+            RagefirePos const p = { a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t, a.z + (b.z - a.z) * t };
+            nearest = std::min(nearest, RagefireDist(RFC_TARAGAMAN, p));
+            EXPECT_TRUE(RagefireKept(*r, RFC_TARAGAMAN, p)) << "leg " << i << " at " << p.x << ", " << p.y;
+        }
+    }
+    EXPECT_NEAR(nearest, 7.06f, 0.1f);   // it walks inside his 12yd detection
+    EXPECT_GT(nearest, r->pullOutRadius + 0.5f);
+
+    // The -x arm's foot, where the party arrives.
+    EXPECT_TRUE(RagefireKept(*r, RFC_TARAGAMAN, { -283.76f, 152.50f, -25.32f }));   // 48711
+    EXPECT_TRUE(RagefireKept(*r, RFC_TARAGAMAN, { -283.59f, 143.86f, -25.30f }));   // 48708
+    // The other arms' guards: past his hub, 6yd below it, never a reason to cross it.
+    for (RagefirePos const& p : { RagefirePos{ -237.42f, 192.85f, -24.36f }, RagefirePos{ -230.13f, 191.09f, -24.92f },
+                                  RagefirePos{ -267.37f, 110.76f, -24.94f }, RagefirePos{ -257.46f, 106.18f, -24.94f },
+                                  RagefirePos{ -198.96f, 151.23f, -25.14f },
+                                  RagefirePos{ -199.19f, 159.01f, -25.14f } })
+        EXPECT_FALSE(RagefireKept(*r, RFC_TARAGAMAN, p)) << p.x << ", " << p.y;
 }

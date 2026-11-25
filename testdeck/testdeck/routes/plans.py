@@ -94,8 +94,8 @@ def check_dungeon(rows, token, heroic):
     """Shared by plan, single-run and roster starts."""
     if token not in rows:
         raise HTTPException(400, f"unknown dungeon '{token}'")
-    # heroicLevel 0/absent = no heroic mode: classic dungeons, which have no
-    # heroic difficulty at all (mirrors the module-side gate).
+    # heroicLevel 0/absent = no heroic mode: most classic dungeons (mirrors the
+    # module-side gate).
     row = rows[token]
     # Scenario rows (module T1): a slice of a parent dungeon, launched by its
     # own token. The module refuses heroic on them (heroicLevel is always 0);
@@ -109,7 +109,7 @@ def check_dungeon(rows, token, heroic):
             raise HTTPException(400, f"scenario '{token}' has no heroic mode")
     if heroic and not row.get("heroicLevel"):
         raise HTTPException(400, f"'{token}' has no heroic mode "
-                                 "(classic dungeons have none)")
+                                 "(its row offers none)")
 
 
 def check_size(rows, token, size):

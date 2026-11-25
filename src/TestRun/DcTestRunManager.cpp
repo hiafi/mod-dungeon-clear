@@ -67,11 +67,11 @@ bool DcTestRunManager::Start(Player* gm, std::string const& dungeonToken,
         return fail(StartErr::UnknownDungeon,
                     "unknown dungeon '" + dungeonToken + "' — see .dc test list");
 
-    // heroicLevel 0 = heroic not offered: only classic dungeons, which have no
-    // heroic difficulty at all (TBC rows run at 70, WotLK at 80).
+    // heroicLevel 0 = heroic not offered: classic dungeons, unless the row says
+    // otherwise (TBC rows run at 70, WotLK at 80).
     if (heroic && row->heroicLevel == 0)
         return fail(StartErr::UnknownDungeon,
-                    "'" + std::string(row->token) + "' has no heroic mode (classic dungeons have none)");
+                    "'" + std::string(row->token) + "' has no heroic mode (its row offers none)");
 
     // The instance's own player cap (Karazhan 10, Gruul 25): the core refuses
     // entry past it, so an oversized run would strand the overflow at the door.
@@ -200,7 +200,7 @@ bool DcTestRunManager::StartRoster(Player* gm, std::string const& dungeonToken,
 
     if (heroic && row->heroicLevel == 0)
         return fail(StartErr::UnknownDungeon,
-                    "'" + std::string(row->token) + "' has no heroic mode (classic dungeons have none)");
+                    "'" + std::string(row->token) + "' has no heroic mode (its row offers none)");
 
     if (!gm || !GET_PLAYERBOT_MGR(gm))
         return fail(StartErr::NoMgr, "no playerbot manager on this account");

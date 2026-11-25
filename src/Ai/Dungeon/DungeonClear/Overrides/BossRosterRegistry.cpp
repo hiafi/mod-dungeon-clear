@@ -35,6 +35,7 @@ namespace
             // Order here is table-scan order only; lookups key on mapId, so it
             // never affects behaviour.
             RegisterScarletMonasteryRoster(t);
+            RegisterRagefireChasmRoster(t);
             RegisterScholomanceRoster(t);
             RegisterSunkenTempleRoster(t);
             RegisterRazorfenDownsRoster(t);

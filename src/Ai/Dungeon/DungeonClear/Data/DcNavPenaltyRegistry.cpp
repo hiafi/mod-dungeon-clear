@@ -274,6 +274,18 @@ namespace
     // wall against whatever geometry it abuts. Z band -64..-50 straddles the
     // ≈-58 floor. costMult 40 (a line the party must not cross, same class as
     // the shortcut rows above).
+    //
+    // MEASURED FOR THE RAGEFIRE REWORK (t/TestRfcRouteProbe.cpp, 2026-11): what
+    // the polyline traces is a rib of rock 1-2yd proud of the trogg chamber's
+    // floor, with the pocket that leads to Oggleflint's den 4-5yd below its north
+    // lip. The unfenced route to the den crosses the rib at x -250..-255 and drops
+    // 5.1yd in 4yd (~52 degrees; the only other crossing, x -262..-258, is as
+    // steep); that is the cut this wall stops. It does NOT close the den: the
+    // routed way is round the rib's west end (-284,-28) -> (-280,-17), complete,
+    // never inside a row, nowhere stepping more than 2.6yd, 498yd from the entrance
+    // against 421 over the lip. Every other leg is unchanged (within 8yd), every
+    // spawn on the map is reached, and none of the three quads is cut back: a gap
+    // at the east end would only reopen the lip.
     // Wailing Caverns (map 43) — the WALL between the lower east floor (z~-63)
     // and the upper west plateau (z~-56/-54) that carries the Pythas -> Skum leg.
     // Recast stitches walkable faces up that wall, so Detour's A* climbs it

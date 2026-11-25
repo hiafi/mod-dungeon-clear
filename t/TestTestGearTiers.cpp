@@ -49,8 +49,12 @@ TEST(DcTestGearTiersTest, EveryRegistryRowIsClassified)
         std::uint32_t const cap = exp == Expansion::Classic ? 60 : (exp == Expansion::Tbc ? 70 : 80);
         if (row.heroicLevel)
         {
-            EXPECT_NE(exp, Expansion::Classic) << row.token;
             EXPECT_EQ(row.heroicLevel, cap) << row.token;
+            // Classic heroics are the reworks' own; each is a decision.
+            if (exp == Expansion::Classic)
+            {
+                EXPECT_EQ(row.mapId, 389u) << row.token;  // Ragefire Chasm
+            }
         }
         EXPECT_LE(row.recommendedLevel, cap) << row.token;
     }
@@ -114,6 +118,11 @@ TEST(DcTestGearTiersTest, EndgameLadderIsTheDocumentedTiers)
     EXPECT_TRUE(HasIlvl(classic, 66));
     EXPECT_TRUE(HasIlvl(classic, 92));
     EXPECT_FALSE(HasIlvl(classic, 120));
+
+    std::vector<Choice> const rfcHeroic = Ladder(389, 60);  // Ragefire Chasm heroic
+    EXPECT_TRUE(HasIlvl(rfcHeroic, 65));  // pre-raid dungeon gear
+    EXPECT_TRUE(HasIlvl(rfcHeroic, 92));
+    EXPECT_FALSE(HasIlvl(rfcHeroic, 120));
 
     std::vector<Choice> const wotlk = Ladder(668, 80);  // Halls of Reflection
     EXPECT_TRUE(HasIlvl(wotlk, 200));

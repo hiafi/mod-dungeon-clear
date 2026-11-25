@@ -36,7 +36,12 @@ namespace DcTestDungeonRegistry
         // signal the harness exists to produce. Sorted by recommended level.
         static std::vector<Row> const rows = {
             // --- Classic ---------------------------------------------------
-            { "rfc",             "Ragefire Chasm",                389,     3.81f,   -14.82f,  -17.84f, 4.390f, 17, "" },
+            // Ragefire Chasm: level 17 against its level-16 bosses. Heroic (the rework,
+            // level-60 bosses) is offered at the classic cap. No no-progress override:
+            // the 800yd of trash from Oggleflint to Jergosh has no kill credit in it, but
+            // the clock re-arms on every pull, target and yard closed, not on kills alone.
+            { "rfc",             "Ragefire Chasm",                389,     3.81f,   -14.82f,  -17.84f, 4.390f, 17,
+              "", /*heroicLevel*/ 60 },
             { "wc",              "Wailing Caverns",                43,  -163.49f,   132.90f,  -73.66f, 5.830f, 22, "" },
             // Deadmines runs at 24, well above the 18 the instance nominally opens at.
             // Its back half is a level-18 party's problem: Gilnid is a level-20

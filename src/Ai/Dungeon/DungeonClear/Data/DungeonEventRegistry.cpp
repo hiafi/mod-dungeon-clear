@@ -573,6 +573,7 @@ namespace
             // it never affects behaviour.
             RegisterShadowfangKeepEvents(t);
             RegisterScarletMonasteryEvents(t);
+            RegisterRagefireChasmEvents(t);
             RegisterRazorfenDownsEvents(t);
             RegisterSunkenTempleEvents(t);
             RegisterZulFarrakEvents(t);

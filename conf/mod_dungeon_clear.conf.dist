@@ -1602,8 +1602,10 @@ DungeonClear.TestRun.StallGraceS = 120
 
 #
 #    DungeonClear.TestRun.NoProgressS
-#        Silent-livelock net: the longest a run may go without ANY boss kill or
-#        objective completion before it is failed as no_progress.
+#        Silent-livelock net: the longest a run may go with no sign of life before
+#        it is failed as no_progress. Any of these re-arms it: a boss kill or
+#        objective, the tank entering or leaving combat, a new victim, that victim's
+#        health moving, the tank closing on the next anchor, an event's progress.
 #
 #        Default: 600
 #
