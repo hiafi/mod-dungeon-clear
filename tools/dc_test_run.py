@@ -4,7 +4,7 @@ dc_test_run.py — everything known about one test run, by its id.
 
 `.dc test` scatters a single run's evidence across five places:
 
-  dc_testruns.jsonl        the finished-run record (schema v7-v14): comp, result,
+  dc_testruns.jsonl        the finished-run record (schema v7-v15): comp, result,
                            fail reason, boss timeline, deaths, loot, pulls, status
                            timeline, pauses, watchdog config, and the teardown
                            DcDiag snapshot
@@ -114,6 +114,7 @@ SIGNALS = [
     ("interrupt MISSED", ["interrupt MISS:"]),
     ("door", ["door blocked", "door-blocked", "door stalled", "forcing door", "force-open"]),
     ("combat", ["phantom combat", "stuck in combat", "flip-early", "regroup"]),
+    ("release / walk back", ["] release:", "] walk back:"]),
     ("death / rez", ["post-combat rez", "died", "wipe", "resurrect"]),
     ("event", ["event-step", "event fired", "event force", "TeleportParty"]),
     ("rest", ["smart rest", "drinking", "eating", "low mana"]),
@@ -545,6 +546,12 @@ def table(rows, headers):
     return out
 
 
+def result_cell(rec):
+    """The result, marked when bots released and walked back (schema 15): not a clean run."""
+    released = rec.get("releaseCount") or 0
+    return rec.get("result", "?") + (f" +{released} released" if released else "")
+
+
 def render_header(rec, live_rec, plan, plan_live, start_s, end_s):
     run_id = rec.get("runId") or (live_rec or {}).get("runId")
     lines = [bold(f"══ {run_id} ══")]
@@ -571,7 +578,8 @@ def render_header(rec, live_rec, plan, plan_live, start_s, end_s):
 
     if rec:
         result = rec.get("result", "?")
-        lines.append(f"  result   : {bold(result)}")
+        note = f" - {rec['releaseCount']} release(s), not a clean clear" if rec.get("releaseCount") else ""
+        lines.append(f"  result   : {bold(result)}{note}")
         if rec.get("successBy"):
             tail = " (event tail still pending)" if rec.get("tailPending") else ""
             lines.append(f"  success  : by {rec['successBy']}{tail}")
@@ -695,6 +703,14 @@ def render_deaths(rec):
              d.get("opponentEntry", ""), "ON BOSS" if d.get("onBoss") else ""]
             for d in deaths]
     return table(rows, ["at", "who", "killed by", "entry", ""])
+
+
+def render_releases(rec):
+    """Bots nobody raised, that released and walked back (schema 15)."""
+    rows = [[mmss(r.get("t")), r.get("name", "?"), f"{r.get('deadS', '?')}s", r.get("why", ""),
+             r.get("outcome", "?"), f"{r.get('walkS', 0)}s"]
+            for r in rec.get("releases") or []]
+    return table(rows, ["at", "who", "dead", "why no rez", "outcome", "walk"]) if rows else []
 
 
 QUALITY_NAMES = {3: "rare", 4: "epic", 5: "legendary", 6: "artifact", 7: "heirloom"}
@@ -1035,7 +1051,10 @@ def render_plan(plan, plan_live, runs_by_id, this_run):
                    f"level {req.get('level') or 'default'}, heroic={req.get('heroic')}, "
                    f"ilvl<={req.get('gearIlvl') or '∞'} quality<={req.get('gearQuality') or '∞'}")
         r = plan.get("runs") or {}
-        out.append(f"  outcome  : {r.get('launched',0)} launched, {r.get('succeeded',0)} succeeded, "
+        n_rel = r.get("succeededWithReleases")  # plan schema 7
+        unclean = f" ({n_rel} with releases, not clean)" if n_rel else ""
+        out.append(f"  outcome  : {r.get('launched',0)} launched, {r.get('succeeded',0)} succeeded"
+                   f"{unclean}, "
                    f"{r.get('failed',0)} failed  ·  " +
                    ", ".join(f"{k}={v}" for k, v in (plan.get("verdicts") or {}).items()))
         d = plan.get("duration") or {}
@@ -1206,7 +1225,7 @@ def cmd_list(data_dir, n):
     rows = []
     for rec in runs[-n:]:
         rows.append([rec.get("runId", ""), rec.get("dungeon", ""),
-                     "H" if rec.get("heroic") else "n", rec.get("result", ""),
+                     "H" if rec.get("heroic") else "n", result_cell(rec),
                      f"{rec.get('bossesKilled','?')}/{rec.get('bossesTotal','?')}",
                      dur(rec.get("durationS")), rec.get("planId", ""),
                      (rec.get("failReason") or "")[:44]])
@@ -1224,7 +1243,7 @@ def cmd_list(data_dir, n):
 
 def cmd_batch(matches, live_matches, prefix):
     print(bold(f"══ {len(matches)+len(live_matches)} runs matching '{prefix}' ══"))
-    rows = [[r.get("runId", ""), r.get("dungeon", ""), r.get("result", ""),
+    rows = [[r.get("runId", ""), r.get("dungeon", ""), result_cell(r),
              f"{r.get('bossesKilled','?')}/{r.get('bossesTotal','?')}",
              dur(r.get("durationS")), (r.get("failReason") or "")[:56]] for r in matches]
     rows += [[r.get("runId", ""), r.get("dungeon", ""), "IN FLIGHT",
@@ -1587,6 +1606,9 @@ def main():
     if extras:
         print(hr("EVENT EXTRAS"));  print("\n".join(extras))
     print(hr("DEATHS"));           print("\n".join(render_deaths(rec)))
+    releases = render_releases(rec)
+    if releases:
+        print(hr("RELEASES"));     print("\n".join(releases))
     print(hr("LOOT"));             print("\n".join(render_loot(rec)))
     print(hr("PULLS"));            print("\n".join(render_pulls(rec)))
     print(hr("STATUS TIMELINE"));  print("\n".join(render_status_timeline(rec, live_rec, args.timeline)))

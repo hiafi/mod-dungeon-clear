@@ -491,6 +491,24 @@ public:
     bool Execute(Event event) override;
 };
 
+// Release and walk back (Util/DcReleaseDecision.h). Runs the stay-dead "auto release"
+// action ON the due corpse's own AI, so the release goes through its session.
+class DungeonClearReleaseDueAction : public Action
+{
+public:
+    DungeonClearReleaseDueAction(PlayerbotAI* botAI) : Action(botAI, "dungeon clear release due") {}
+    bool Execute(Event event) override;
+};
+
+// The released bot's walk to the party, over the full-length route (the follow rungs
+// path with the engine's capped generator, which does not reach across a dungeon).
+class DungeonClearWalkBackAction : public DcMovementAction
+{
+public:
+    DungeonClearWalkBackAction(PlayerbotAI* botAI) : DcMovementAction(botAI, "dungeon clear walk back") {}
+    bool Execute(Event event) override;
+};
+
 // Drives a travel OBJECTIVE (DungeonAnchorKind::Objective from
 // BossRosterRegistry) once the tank has reached it (DungeonClearAtObjectiveTrigger
 // fired). Runs the objective's declarative event (DungeonEventRegistry) or its

@@ -101,9 +101,12 @@ namespace DcTestPlanSummary
         }
 
         ++_verdicts[o.result];
+        _releases += o.releases;
         if (o.result == "success")
         {
             ++_succeeded;
+            if (o.releases)
+                ++_succeededWithReleases;
             ++_successDurations[o.durationS];
             _successDurationSum += o.durationS;
         }
@@ -173,6 +176,8 @@ namespace DcTestPlanSummary
         s.launched = _launched;
         s.succeeded = _succeeded;
         s.failed = _failed;
+        s.succeededWithReleases = _succeededWithReleases;
+        s.releases = _releases;
         s.verdicts = CountSorted(_verdicts);
         s.failReasons = CountSorted(_reasons);
         s.unattributedWipes = _unattributedWipes;
@@ -253,6 +258,8 @@ namespace DcTestPlanSummary
             o << "\"runs\":{\"launched\":" << s.launched
               << ",\"succeeded\":" << s.succeeded
               << ",\"failed\":" << s.failed
+              << ",\"succeededWithReleases\":" << s.succeededWithReleases
+              << ",\"releases\":" << s.releases
               << "},\"verdicts\":{";
             for (std::size_t i = 0; i < s.verdicts.size(); ++i)
             {

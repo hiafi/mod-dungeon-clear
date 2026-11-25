@@ -51,6 +51,7 @@ enum class DcThrottle : uint8
     TocMoveIssue,        // the ToC driver's point move (the horse, or the tank on foot)
     OcMoveIssue,         // the Oculus rider's drake move (the vehicle base) and its giver walk
     ChessMoveIssue,      // a Karazhan chess member's walk (sideline, a piece, Echo, the chest)
+    WalkBackIssue,       // a released bot's route back to the party (time only)
 
     // --- log throttles (time only) -----------------------------------------
     TransitLog,          // BwlTransitLog — one crossing telemetry line per 3s

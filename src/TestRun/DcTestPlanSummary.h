@@ -91,6 +91,10 @@ namespace DcTestPlanSummary
         std::uint32_t launched = 0;   // outcomes seen (== runs started)
         std::uint32_t succeeded = 0;
         std::uint32_t failed = 0;
+        // Successes that needed a release (not clean clears), and the releases of every
+        // run in the plan.
+        std::uint32_t succeededWithReleases = 0;
+        std::uint32_t releases = 0;
         std::vector<KeyCount> verdicts;     // by count desc, then name
         std::vector<KeyCount> failReasons;  // failures only, by count desc
         // Duration stats over SUCCESSFUL runs only (failure durations are
@@ -154,6 +158,8 @@ namespace DcTestPlanSummary
         std::uint32_t _launched = 0;
         std::uint32_t _succeeded = 0;
         std::uint32_t _failed = 0;
+        std::uint32_t _succeededWithReleases = 0;
+        std::uint32_t _releases = 0;
         std::map<std::string, std::uint32_t> _verdicts;
         std::map<std::string, std::uint32_t> _reasons;
         std::map<std::uint32_t, std::uint32_t> _successDurations;  // seconds -> runs
@@ -179,7 +185,8 @@ namespace DcTestPlanSummary
         // 5: added the campaign's gear ceiling (gearIlvl/gearQuality)
         // 6: pool plans — `endless`, `checkpoint`, `pick`, per-entry `pool`
         //    stats, `runIdsRecent`
-        std::uint32_t schema = 6;
+        // 7: added runs.succeededWithReleases and runs.releases
+        std::uint32_t schema = 7;
         std::string planId;
         std::string dungeon;
         std::string dungeonName;

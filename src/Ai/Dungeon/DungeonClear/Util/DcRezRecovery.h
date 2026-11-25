@@ -59,6 +59,7 @@ namespace DcRezRecovery
         std::string rezzerName;
         std::string targetName;
         std::string deadName = "Someone";
+        std::string walkerName;  // WalkingBack / WalkTimedOut / ReleaseFailed: the bot
         // Parallel pairing, resolved to GUIDs (see DcRezDecision::Result::pairs).
         // Consumed on RAID runs only — each paired rezzer walks to its own
         // corpse; 5-mans keep the single rezzer/target above.
@@ -79,6 +80,11 @@ namespace DcRezRecovery
     // With the feature disabled and a death present it returns
     // Disable/Disabled so the party-died trigger keeps its classic behavior.
     Plan Evaluate(Player* bot);
+
+    // Advance ONLY the release-and-walk-back clocks of `bot`'s run, for a caller that may
+    // be a corpse. False, with nothing but the release state touched, when the feature
+    // does not apply to the run.
+    bool AdvanceRelease(Player* bot);
 
     // Cheap hold-gate read for the leader's readiness sites (between-pulls,
     // event rest): true while the run should hold for a recovery — feature on,

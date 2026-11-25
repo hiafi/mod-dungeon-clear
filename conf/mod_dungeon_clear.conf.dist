@@ -319,6 +319,60 @@ DungeonClear.PostCombatRez = 1
 DungeonClear.PostCombatRezTimeoutSecs = 90
 
 #
+#    DungeonClear.ReleaseWalkBack
+#        Release and walk back: the fallback when nobody raises a dead bot
+#        (needs PostCombatRez and PreventBotRelease on). A bot that lay dead for
+#        ReleaseAfterSecs releases its spirit as a player would, is revived at
+#        the instance's checkpoint and walks back to the party; the run waits
+#        for it. It also covers the party with no living resurrector. Only on
+#        maps with an entrance checkpoint (mod-dungeon-checkpoint enabled and a
+#        row for the map) that the run started on, so never in a wing or a
+#        scenario that starts elsewhere; never in a raid or the Oculus, never
+#        during a boss encounter, never for a player's character (self-bots
+#        included). A full wipe still ends the run. Test records count the
+#        releases (releaseCount), so such a clear does not read as clean.
+#        Server-wide: the four keys have no per-run override.
+#            0 = off
+#            1 = `.dc test` runs only
+#            2 = every bot run
+#
+#        Default: 1
+#
+
+DungeonClear.ReleaseWalkBack = 1
+
+#
+#    DungeonClear.ReleaseAfterSecs
+#        Seconds a bot lies dead before it releases. A fight freezes the clock;
+#        a resurrection already being cast on it finishes first.
+#
+#        Default: 30
+#
+
+DungeonClear.ReleaseAfterSecs = 30
+
+#
+#    DungeonClear.ReleaseWalkLimitSecs
+#        Seconds a released bot has to reach the party (fights excluded). Over
+#        it, the run ends with a reason naming the bot. The walk has no jumps:
+#        a way back across a one-way drop runs into this limit too.
+#
+#        Default: 300
+#
+
+DungeonClear.ReleaseWalkLimitSecs = 300
+
+#
+#    DungeonClear.ReleaseMaxPerBot
+#        How often one bot may release in one run. Past it the run treats its
+#        death as if this feature were off.
+#
+#        Default: 2
+#
+
+DungeonClear.ReleaseMaxPerBot = 2
+
+#
 #    DungeonClear.StrandedRecovery
 #        Stranded-member recovery failsafe. The dominant way a run stalls now is
 #        a party member falling THROUGH the world geometry (or wedging where the

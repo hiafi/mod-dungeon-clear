@@ -19,6 +19,10 @@
  * flag is off — or the bot is not on a dungeon/raid map — this behaves exactly
  * like the stock AutoReleaseSpiritAction.
  *
+ * ONE EXCEPTION: release and walk back (Util/DcReleaseDecision.h). A bot nobody
+ * raised in time releases here, on its own session, and the checkpoint revives it;
+ * everything that decides it is in DcReleaseRecovery.
+ *
  * NOTE: this only suppresses the routine spirit-release. The DeadStrategy's
  * anti-stuck "repop" paths (falling far / location stuck) are intentionally left
  * intact as a safety net against a dead bot getting wedged in geometry.
@@ -38,6 +42,11 @@ public:
         : AutoReleaseSpiritAction(botAI, "auto release") {}
 
     bool isUseful() override;
+    bool Execute(Event event) override;
+
+private:
+    bool HoldsHere() const;  // in an instance with PreventBotRelease on
+    bool _due = false;       // isUseful's answer, spent by the Execute it lets through
 };
 
 #endif

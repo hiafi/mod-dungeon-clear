@@ -12,6 +12,7 @@
 #include "Ai/Dungeon/DungeonClear/Settings/DcSettings.h"
 #include "Ai/Dungeon/DungeonClear/Util/DcCombatFlag.h"
 #include "Ai/Dungeon/DungeonClear/Util/DcLeaderSignal.h"
+#include "Ai/Dungeon/DungeonClear/Util/DcReleaseRecovery.h"
 #include "Ai/Dungeon/DungeonClear/Util/DcRun.h"
 #include "Ai/Dungeon/DungeonClear/Util/DcRunWing.h"
 #include "Ai/Dungeon/DungeonClear/Util/DcStatusPublisher.h"
@@ -265,11 +266,12 @@ namespace
         return false;
     }
 
-    DcRezRecovery::Plan EvaluateImpl(Player* bot, bool mutate)
+    DcRezRecovery::Plan EvaluateImpl(Player* bot, bool wantMutate)
     {
         DcRezRecovery::Plan plan;
         if (!bot)
             return plan;
+        bool const mutate = DcRezDecision::MayAdvance(wantMutate, bot->IsAlive());
 
         Player* owner = ResolveRunOwner(bot);
         PlayerbotAI* ownerAI = owner ? GET_PLAYERBOT_AI(owner) : nullptr;
@@ -288,6 +290,43 @@ namespace
         bool anyDead = false;
         for (Member const& m : members)
             anyDead = anyDead || m.isDead;
+
+        // Release and walk back: advance its clocks while there is a body or a walker.
+        bool const work = anyDead || DcReleaseRecovery::HasWalkers(run);
+        bool const rezBlocked = work && RezBlockedByInstance(bot);
+        bool const partyEngaged = work && AnyMemberEngaged(players);
+        if (mutate && work && DcRezRecovery::Enabled(bot) && DcReleaseRecovery::Refresh(owner, run))
+            DcReleaseRecovery::Track(owner, run, members, players, partyEngaged, rezBlocked, now);
+        else if (mutate)
+        {
+            run.release.lastMs = 0;
+            for (DcReleaseMember& m : run.release.members)
+                m.walking = false;  // PostCombatRez switched off mid-walk; none otherwise
+        }
+
+        // A stall reason left by the drive a wait has parked would run out the test
+        // harness's stall clock under it. Only while the verdict holds for that wait: in
+        // a blocked stand-down the run drives on, and its stalls are real.
+        auto const clearParkedStall = [&](bool waiting)
+        {
+            if (mutate && waiting && !rezBlocked && plan.verdict.outcome == DcRezDecision::Outcome::Hold)
+                ownerAI->GetAiObjectContext()->GetValue<std::string&>(DcKey::StallReason)->Get().clear();
+        };
+
+        // Nobody down, somebody still on the way back: the recovery episode goes on
+        // (its resume line waits for the arrival), the no-corpse clocks do not.
+        if (!anyDead && DcReleaseRecovery::HasWalkers(run))
+        {
+            if (mutate)
+            {
+                run.rezPendingSinceMs = 0;
+                run.noRezzerSinceMs = 0;
+                run.noRezzerQuietSinceMs = 0;
+            }
+            DcReleaseRecovery::ApplyWalkVerdict(run, plan.verdict, plan.walkerName);
+            clearParkedStall(true);
+            return plan;
+        }
 
         if (!anyDead)
         {
@@ -374,7 +413,6 @@ namespace
         // clears the instant the block lifts, so the wait the kernel measures is
         // always the CURRENT block — a boss that resets and re-engages does not
         // inherit the seconds its last attempt burned.
-        bool const rezBlocked = RezBlockedByInstance(bot);
         if (mutate)
         {
             if (!rezBlocked)
@@ -399,14 +437,10 @@ namespace
         for (Member const& m : members)
             if (m.isDead && !DcRezDecision::SkipAsUnsafe(m))
                 allCorpsesUnsafe = false;
-        bool const partyEngaged = AnyMemberEngaged(players);
-        if (mutate)
-        {
-            if (partyEngaged || rezBlocked || allCorpsesUnsafe || DcKarazhan::ChessIsOn(bot))
-                run.rezPendingSinceMs = 0;
-            else if (run.rezPendingSinceMs == 0)
-                run.rezPendingSinceMs = now ? now : 1;
-        }
+        // Nor is a walk back charged to it: the bot on its way may be the rezzer.
+        bool const clockStopped = partyEngaged || rezBlocked || allCorpsesUnsafe ||
+                                  DcKarazhan::ChessIsOn(bot) || DcReleaseRecovery::HasWalkers(run);
+        run.rezPendingSinceMs = DcRezDecision::PendingClock(run.rezPendingSinceMs, now, mutate, clockStopped);
 
         // The NoRezzer floor's other input: is any LIVING survivor still carrying
         // the core combat flag? Deliberately the raw flag rather than engagement —
@@ -464,8 +498,11 @@ namespace
         in.rezBlocked = rezBlocked;
         in.blockedSinceMs = run.rezBlockedSinceMs;
         in.blockedHoldMaxMs = DC_REZ_BLOCKED_HOLD_MAX_MS;
+        in.releasePending = DcReleaseRecovery::AnyWillRelease(run, players) || DcReleaseRecovery::HasWalkers(run);
 
         plan.verdict = DcRezDecision::Decide(in, members);
+        DcReleaseRecovery::ApplyWalkVerdict(run, plan.verdict, plan.walkerName);
+        clearParkedStall(in.releasePending);
 
         // Advance the floor's clocks from the verdict we just got. They can only be
         // stamped after the fact — whether a rezzer is left is precisely what the
@@ -475,7 +512,8 @@ namespace
         if (mutate)
         {
             bool const noRezzer = plan.verdict.reason == DcRezDecision::Reason::NoRezzer ||
-                                  plan.verdict.reason == DcRezDecision::Reason::NoRezzerInFight;
+                                  plan.verdict.reason == DcRezDecision::Reason::NoRezzerInFight ||
+                                  plan.verdict.reason == DcRezDecision::Reason::AwaitingRelease;
             if (!noRezzer)
             {
                 run.noRezzerSinceMs = 0;
@@ -547,6 +585,9 @@ namespace
                 // fight ends, at which point the verdict becomes the classic disable.
                 line = plan.targetName + " died and no one left can resurrect \xe2\x80\x94 "
                        "finishing this fight first.";
+            else if (plan.verdict.reason == DcRezDecision::Reason::AwaitingRelease)
+                line = plan.targetName + " died where no one can resurrect them, "
+                       "waiting for them to release and walk back.";
             else
                 line = plan.targetName + " died \xe2\x80\x94 " + plan.rezzerName +
                        " is coming to resurrect them.";
@@ -644,6 +685,23 @@ namespace DcRezRecovery
         return EvaluateImpl(bot, /*mutate*/ true);
     }
 
+    bool AdvanceRelease(Player* bot)
+    {
+        Player* const owner = bot ? ResolveRunOwner(bot) : nullptr;
+        PlayerbotAI* const ownerAI = owner ? GET_PLAYERBOT_AI(owner) : nullptr;
+        if (!ownerAI)
+            return false;
+        DcRunState& run = DcRun::Of(ownerAI);
+        if (!run.enabled || run.paused || !Enabled(bot) || !DcReleaseRecovery::Refresh(owner, run))
+            return false;
+        std::vector<Member> members;
+        std::vector<Player*> players;
+        BuildSnapshot(bot, owner, members, players);
+        DcReleaseRecovery::Track(owner, run, members, players, AnyMemberEngaged(players), RezBlockedByInstance(bot),
+                                 getMSTime());
+        return true;
+    }
+
     bool IsPending(Player* leaderTank)
     {
         if (!leaderTank || !Enabled(leaderTank))
@@ -659,6 +717,11 @@ namespace DcRezRecovery
         // corpse the run is driven from (DcRezDecision::LeaderCorpse), so neither may
         // the block's clock below release the hold over it.
         if (leaderTank->isDead())
+            return true;
+
+        // A released bot on its way back holds the run like the corpse it was. Bounded
+        // by the walk's own limit (DcReleaseDecision).
+        if (DcReleaseRecovery::HasWalkers(run))
             return true;
 
         // THE ONE CLOCK READ THIS PREDICATE MAKES, and it is here to stop a hold that
@@ -686,7 +749,8 @@ namespace DcRezRecovery
             Player* member = ref->GetSource();
             if (!member || member->GetMapId() != leaderTank->GetMapId())
                 continue;
-            if (member->isDead() && !CorpseAmongIdleHostiles(member))
+            if (member->isDead() &&
+                (!CorpseAmongIdleHostiles(member) || DcReleaseRecovery::WillRelease(run, member)))
                 return true;
         }
         return false;
@@ -923,6 +987,10 @@ namespace DcRezRecovery
         if (plan.verdict.reason == DcRezDecision::Reason::BlockedWaiting)
             return "Can't resurrect " + plan.targetName +
                    " while the encounter is in progress.";
+        if (plan.verdict.reason == DcRezDecision::Reason::WalkingBack)
+            return "Waiting for " + plan.walkerName + " to walk back.";
+        if (plan.verdict.reason == DcRezDecision::Reason::AwaitingRelease)
+            return "Waiting for " + plan.targetName + " to release and walk back.";
         // No rezzer is elected on this hold, so rezzerName is empty (the panel
         // read " is coming to resurrect X.").
         if (plan.verdict.reason == DcRezDecision::Reason::NoRezzerInFight)

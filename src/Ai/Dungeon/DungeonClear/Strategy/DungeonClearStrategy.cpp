@@ -36,6 +36,16 @@ void DungeonClearStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         "dungeon clear recover stranded",
         { NextAction("dungeon clear recover stranded", DcRel::StrandedRecovery) }));
 
+    // Release and walk back: a living bot releases the bodies whose turn it is (the
+    // dead engine polls the same action, but at random), and a released bot walks
+    // back to the party. Both inert unless the run has such a body / walker.
+    triggers.push_back(new TriggerNode(
+        "dungeon clear release due",
+        { NextAction("dungeon clear release due", DcRel::ReleaseDue) }));
+    triggers.push_back(new TriggerNode(
+        "dungeon clear walk back",
+        { NextAction("dungeon clear walk back", DcRel::WalkBack) }));
+
     // Post-combat rez driver. Registered for ALL bots (the elected rezzer may
     // be a follower or the leader itself — a prot paladin raising its healer);
     // the trigger fires only on the one deterministically-elected rezzer.

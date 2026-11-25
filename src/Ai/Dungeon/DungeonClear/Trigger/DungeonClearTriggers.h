@@ -139,6 +139,23 @@ public:
     bool IsActive() override;
 };
 
+// Release and walk back (Util/DcReleaseDecision.h). The terminal driver, non-combat:
+// fires while a body of the run is due to release.
+class DungeonClearReleaseDueTrigger : public Trigger
+{
+public:
+    DungeonClearReleaseDueTrigger(PlayerbotAI* botAI) : Trigger(botAI, "dungeon clear release due", 1) {}
+    bool IsActive() override;
+};
+
+// Any bot, non-combat: fires while THIS bot has released and is not back yet.
+class DungeonClearWalkBackTrigger : public Trigger
+{
+public:
+    DungeonClearWalkBackTrigger(PlayerbotAI* botAI) : Trigger(botAI, "dungeon clear walk back", 1) {}
+    bool IsActive() override;
+};
+
 class DungeonClearAllClearedTrigger : public Trigger
 {
 public:

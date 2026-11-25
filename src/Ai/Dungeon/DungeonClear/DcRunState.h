@@ -71,6 +71,60 @@ struct DcTestExtra
     bool numeric = false;
 };
 
+// Release and walk back (Util/DcReleaseDecision.h): one group member's clocks. All
+// milliseconds accrued by DcReleaseRecovery::Track, never stamps, so a fight freezes
+// them instead of restarting them.
+struct DcReleaseMember
+{
+    ObjectGuid  guid;
+    std::string name;
+    uint32 deadMs = 0;           // dead with the clock running; 0 while alive
+    uint32 walkMs = 0;           // walking back, fights excluded
+    uint32 releases = 0;         // releases spent this run
+    bool   walking = false;      // released, alive, not back with the party yet
+    bool   walkTimedOut = false; // the walk is over its limit: the run ends on it
+    bool   rezUnderway = false;  // last sample: a resurrect is being cast on any body / offered
+    bool   inRegion = false;     // last sample: it would revive on the run's own ground
+    bool   corpseUnsafe = false; // last sample: lies among idle hostiles
+};
+
+struct DcReleaseState
+{
+    std::vector<DcReleaseMember> members;
+    uint32 lastMs = 0;            // getMSTime() of the last Track; 0 = not counting
+    bool   applies = false;       // last Track: the feature is on for this run and map
+    bool   anyAlive = false;      // last Track: somebody is standing (false = full wipe)
+    bool   engaged = false;       // last Track: the party fights
+    bool   rezBlocked = false;    // last Track: the instance reports an encounter in progress
+    bool   anyFlagged = false;    // last Track: a living member is combat-flagged
+    uint32 quietMs = 0;           // nobody engaged for this long
+    float  startX = 0.0f, startY = 0.0f, startZ = 0.0f;  // where the run started (its region)
+    bool   livingRezzer = false;  // last Track: some living member's class can resurrect
+    std::string failedName;       // a release that brought nobody back: the run ends on it
+
+    DcReleaseMember* Find(ObjectGuid guid)
+    {
+        for (DcReleaseMember& m : members)
+            if (m.guid == guid)
+                return &m;
+        return nullptr;
+    }
+
+    DcReleaseMember const* Find(ObjectGuid guid) const { return const_cast<DcReleaseState*>(this)->Find(guid); }
+};
+
+// One release, for the test record (DcTestRunRecord::ReleaseEntry).
+struct DcReleaseLogEntry
+{
+    ObjectGuid  guid;
+    std::string name;
+    uint32      atMs = 0;     // getMSTime() of the release
+    uint32      deadS = 0;    // out-of-combat seconds the body lay
+    std::string why;          // why no resurrection
+    std::string outcome;      // "" = still walking; "arrived" | "died" | "timeout" | "failed"
+    uint32      walkS = 0;    // walk seconds when the outcome was filed
+};
+
 struct DcRunState
 {
     // === run session — cleared by Reset() (dc on / dc off / death / all-cleared) ===
@@ -185,6 +239,11 @@ struct DcRunState
     // DcRezDecision.h); 0 = the spell is castable. Cleared the moment the block
     // lifts, so a boss mid-reset gets a fresh wait rather than a stale verdict.
     uint32 rezBlockedSinceMs    = 0;
+
+    // === release and walk back (leader-owned, written cross-bot) ==================
+    // Maintained by DcReleaseRecovery::Track out of DcRezRecovery::Evaluate, from
+    // whichever member evaluates first in a tick (the rez clocks' own access pattern).
+    DcReleaseState release;
 
     // === raid boss stand-down (leader-owned, read cross-bot) ======================
     // The hysteresis state + per-tick memo behind DcBossStandDown::IsActive: while
@@ -563,8 +622,15 @@ struct DcRunState
     // overwrites it in place (insertion order is kept for the record), so an
     // event can simply re-publish its counters on every change. Keep it small —
     // it is copied into the harness once a second.
+    //
+    // releaseLog - every release and walk back of the run (schema 15 `releases`), in
+    // order. Part of this block for the same reason: a run that ends on a walk is
+    // disabled, and so Reset(), in the tick that files the outcome. Capped: outside the
+    // harness nothing clears it.
     uint32 eventProgressSeq = 0;
     std::vector<DcTestExtra> testExtras;
+    std::vector<DcReleaseLogEntry> releaseLog;
+    static constexpr std::size_t kMaxReleaseLog = 100;
 
     // PartyWide chain falls this run (DcPartyWideChain::HandleFall): every time
     // a bot ended up in an event's fall volume. Published as the `chainFalls`
@@ -657,6 +723,7 @@ struct DcRunState
     {
         eventProgressSeq = 0;
         testExtras.clear();
+        releaseLog.clear();
     }
 
     // --- the RUN WING (Explicit-select split maps: Blackrock Spire) ----------
@@ -869,10 +936,12 @@ struct DcRunState
     {
         uint32 const seq = eventProgressSeq;
         std::vector<DcTestExtra> extras = std::move(testExtras);
+        std::vector<DcReleaseLogEntry> releases = std::move(releaseLog);
         DcRunWing::Latch wing = std::move(runWing);
         *this = DcRunState{};
         eventProgressSeq = seq;
         testExtras = std::move(extras);
+        releaseLog = std::move(releases);
         runWing = std::move(wing);
     }
 

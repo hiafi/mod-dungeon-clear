@@ -371,7 +371,7 @@ TEST(DcTestPlanSummaryTest, ToJsonlCarriesHeaderAndStats)
                            Failure("r2", "no_progress", "he said \"no\"")});
     std::string const line = ToJsonl(h, s);
 
-    EXPECT_NE(line.find("\"schema\":6"), std::string::npos);
+    EXPECT_NE(line.find("\"schema\":7"), std::string::npos);
     EXPECT_NE(line.find("\"planId\":\"tp-1\""), std::string::npos);
     // The requested block is the campaign's inputs verbatim — including the
     // gear ceiling, without which two campaigns' numbers are not comparable.
@@ -379,7 +379,8 @@ TEST(DcTestPlanSummaryTest, ToJsonlCarriesHeaderAndStats)
                         ",\"heroic\":false,\"seedBase\":7,\"size\":0,\"gearIlvl\":141,\"gearQuality\":4}"),
               std::string::npos);
     EXPECT_NE(line.find("\"result\":\"completed\""), std::string::npos);
-    EXPECT_NE(line.find("\"runs\":{\"launched\":2,\"succeeded\":1,\"failed\":1}"),
+    EXPECT_NE(line.find("\"runs\":{\"launched\":2,\"succeeded\":1,\"failed\":1,"
+                        "\"succeededWithReleases\":0,\"releases\":0}"),
               std::string::npos);
     EXPECT_NE(line.find("\"verdicts\":{"), std::string::npos);
     EXPECT_NE(line.find("\"success\":1"), std::string::npos);
@@ -392,4 +393,22 @@ TEST(DcTestPlanSummaryTest, ToJsonlCarriesHeaderAndStats)
     // Free-text reason is escaped, and no raw newline leaks into the line.
     EXPECT_NE(line.find("\\\"no\\\""), std::string::npos);
     EXPECT_EQ(line.find('\n'), std::string::npos);
+}
+
+// A clear that needed a release is not a clean clear, and the plan's pass rate is what
+// gets read (run schema 15).
+TEST(DcTestPlanSummaryTest, ReleasesAreCountedBesideThePassRate)
+{
+    DcTestPlan::RunOutcome released = Success("r2", 120);
+    released.releases = 2;
+    DcTestPlan::RunOutcome lost = Failure("r3", "wipe", "wiped");
+    lost.releases = 1;
+    Stats const s = Build({Success("r1", 100), released, lost});
+    EXPECT_EQ(s.succeeded, 2u);
+    EXPECT_EQ(s.succeededWithReleases, 1u);
+    EXPECT_EQ(s.releases, 3u);
+
+    Header h;
+    h.planId = "tp-2";
+    EXPECT_NE(ToJsonl(h, s).find("\"succeededWithReleases\":1,\"releases\":3}"), std::string::npos);
 }

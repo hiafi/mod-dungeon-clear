@@ -108,6 +108,7 @@ namespace DcTestPlan
         std::uint32_t durationS = 0;
         std::uint32_t bossesKilled = 0;
         std::uint32_t bossesTotal = 0;
+        std::uint32_t releases = 0;  // bots that released and walked back (DcTestRunRecord::releases)
         std::vector<std::string> bossKills;
         // Every boss on the run's roster, in progression order. Gives the plan
         // summary a denominator that includes bosses no run ever reached.

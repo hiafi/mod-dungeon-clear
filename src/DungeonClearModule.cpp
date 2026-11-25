@@ -99,6 +99,7 @@
 #include "Ai/Dungeon/DungeonClear/Data/Events/DungeonEventTables.h"
 #include "Ai/Dungeon/DungeonClear/Util/DcCombatPurge.h"
 #include "Ai/Dungeon/DungeonClear/Util/DcPathWorker.h"
+#include "Ai/Dungeon/DungeonClear/Util/DcReleaseRecovery.h"
 #include "Ai/Dungeon/DungeonClear/Util/DcStratTrapAlley.h"
 #include "Ai/Dungeon/DungeonClear/Util/DcFirstContact.h"
 #include "Ai/Dungeon/DungeonClear/Util/DcPullBrake.h"
@@ -205,6 +206,25 @@ public:
     }
 };
 
+// Release and walk back: a bot whose release no module answered stays where it is (a
+// ghost over its body; the run then ends) instead of being sent to a graveyard outside.
+// Only for the release DC itself is making right now (DcReleaseRecovery::IsReleasing).
+// Registered on the first world tick like the script above, so it sorts after the
+// checkpoint module's hook: the first script to return false ends the hook's chain.
+class DungeonClearReleaseGuardScript : public PlayerScript
+{
+public:
+    DungeonClearReleaseGuardScript()
+        : PlayerScript("DungeonClearReleaseGuardScript", {
+            PLAYERHOOK_CAN_REPOP_AT_GRAVEYARD
+        }) {}
+
+    bool OnPlayerCanRepopAtGraveyard(Player* player) override
+    {
+        return !DcReleaseRecovery::IsReleasing(player);
+    }
+};
+
 class DungeonClearRegistrarWorldScript : public WorldScript
 {
 public:
@@ -263,6 +283,9 @@ public:
         // this world-thread hook.
         new DungeonClearSpectatorMoverEndScript();
 
+        new DungeonClearReleaseGuardScript();
+        DcReleaseRecovery::LoadCheckpointSpots();
+
         // The dashboard's test-plan start form needs the dungeon catalogue +
         // caps; publish them once the config is final (first world tick).
         DcTestDungeonRegistry::WriteSidecar();
@@ -291,6 +314,7 @@ public:
     void OnAfterConfigLoad(bool /*reload*/) override
     {
         DcSettings::InvalidateConfCache();
+        DcReleaseRecovery::RefreshCheckpointSwitch();
         // The one tunable a reload CANNOT apply: say so rather than leaving an
         // admin to wonder why the module is still running (or still absent).
         DcModule::WarnIfConfDiffersFromLatch();

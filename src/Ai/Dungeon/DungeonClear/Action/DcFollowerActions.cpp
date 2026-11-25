@@ -58,6 +58,7 @@
 #include "Ai/Dungeon/DungeonClear/Util/DcMovement.h"
 #include "Ai/Dungeon/DungeonClear/Util/DcPartyState.h"
 #include "Ai/Dungeon/DungeonClear/Util/DcPathWorker.h"
+#include "Ai/Dungeon/DungeonClear/Util/DcReleaseRecovery.h"
 #include "Ai/Dungeon/DungeonClear/Util/DcRezRecovery.h"
 #include "Ai/Dungeon/DungeonClear/Data/FightInPlaceRegistry.h"
 #include "Ai/Dungeon/DungeonClear/Data/ScriptedPullRegistry.h"
@@ -210,10 +211,26 @@ namespace
             DcMovement::StopBot(bot, DcMovement::Stop::Hold);
         return true;
     }
+
+    // THE TANK WALKS BACK TO THE PARTY, so the party waits where it is: following
+    // would walk everyone to the checkpoint, through whatever respawned behind them.
+    // Yields the tick like the stand-downs above, so the wait is spent eating.
+    bool StandDownForWalkingTank(Player* bot)
+    {
+        if (!bot || !DcReleaseRecovery::IsLeaderWalkingBack(bot))
+            return false;
+        MotionMaster* mm = bot->GetMotionMaster();
+        if (mm && mm->GetCurrentMovementGeneratorType() == FOLLOW_MOTION_TYPE)
+            DcMovement::StopBot(bot, DcMovement::Stop::Hold);
+        return true;
+    }
 }
 
 bool DungeonClearFollowTankAction::Execute(Event /*event*/)
 {
+    if (StandDownForWalkingTank(bot))
+        return false;
+
     // A recovery in progress and this bot is the one walking to the corpse:
     // following the tank is exactly the wrong thing to do. See StandDownForRezzer.
     if (StandDownForRezzer(bot))
@@ -1339,8 +1356,11 @@ namespace
                 consider(h);
         };
 
-        // 1. The leader's own fight takes priority (the pack it is holding).
-        considerFrom(leader);
+        // 1. The leader's own fight takes priority (the pack it is holding), unless it is
+        // on its way back from a release: that fight is not the party's.
+        bool const leaderFar = DcReleaseRecovery::IsLeaderWalkingFar(bot);
+        if (!leaderFar)
+            considerFrom(leader);
         if (best)
             return best;
 
@@ -1355,7 +1375,7 @@ namespace
                     continue;
                 if (m->GetMapId() != bot->GetMapId())
                     continue;
-                if (leader && m->GetExactDist2d(leader) > reach)
+                if (leader && m->GetExactDist2d(leaderFar ? bot : leader) > reach)
                     continue;  // keep it the tank's fight, not a far straggler's
                 considerFrom(m);
             }
@@ -2512,4 +2532,60 @@ bool DungeonClearRezPartyAction::Execute(Event /*event*/)
     }
     RezRefusalDiag(botAI, bot, target, rezAction);
     return false;
+}
+
+bool DungeonClearReleaseDueAction::Execute(Event /*event*/)
+{
+    Player* const body = DcReleaseRecovery::DueBody(bot);
+    PlayerbotAI* const bodyAI = body ? GET_PLAYERBOT_AI(body) : nullptr;
+    // Stock's own action on its own session, with the usefulness test re-asked there.
+    return bodyAI && bodyAI->DoSpecificAction("auto release", Event(), /*silent*/ true);
+}
+
+bool DungeonClearWalkBackAction::Execute(Event /*event*/)
+{
+    // About 160yd of the smoothed route per glide; the next one is built from where it
+    // ends, against the destination as it is then.
+    constexpr std::size_t WINDOW_POINTS = 40;
+    constexpr uint32 REBUILD_MS = 1000;
+    constexpr float REST_HP_PCT = 50.0f;
+    constexpr float REST_MANA_PCT = 25.0f;
+
+    Position dest;
+    if (!DcReleaseRecovery::WalkTarget(bot, dest))
+        return false;
+
+    // Always owns the tick: for the tank, everything below drives at the next boss.
+    if (DcMovement::OwnsRunningEscort(bot))
+        return true;
+    if (DcRun::Of(botAI).Throttled(DcThrottle::WalkBackIssue, REBUILD_MS))
+        return true;
+
+    // Rest first after a fight on the way (a fight ends the glide, so it is asked here).
+    // From here and not by yielding: for the tank, everything below this rung drives at
+    // the next boss. Without supplies it walks on.
+    bool const hungry = bot->GetHealthPct() < REST_HP_PCT;
+    bool const thirsty = bot->GetMaxPower(POWER_MANA) && bot->GetPowerPct(POWER_MANA) < REST_MANA_PCT;
+    if ((hungry && botAI->DoSpecificAction("food", Event(), /*silent*/ true)) ||
+        (thirsty && botAI->DoSpecificAction("drink", Event(), /*silent*/ true)))
+        return true;
+
+    ChunkedPathfinder::Result const path =
+        LongRangePathfinder::Build(bot, dest.GetPositionX(), dest.GetPositionY(), dest.GetPositionZ());
+    if (path.reachable && !path.segments.empty())
+    {
+        Movement::PointsArray points;
+        points.emplace_back(bot->GetPositionX(), bot->GetPositionY(), bot->GetPositionZ());
+        // LongRangePathfinder builds one walkable segment, never a jump leg.
+        for (G3D::Vector3 const& p : path.segments.front().polyline)
+            if (points.size() <= WINDOW_POINTS)
+                points.push_back(p);
+        if (DcMovement::SplinePath(botAI, points))
+            return true;
+    }
+
+    // No long route from here: the engine's own generator, which may still get a leg
+    // of it. The walk's limit is what ends a bot that has no way back.
+    DcMoveTo(bot->GetMapId(), dest.GetPositionX(), dest.GetPositionY(), dest.GetPositionZ());
+    return true;
 }

@@ -15,6 +15,7 @@
 #include "Ai/Dungeon/DungeonClear/Util/DcLeaderSignal.h"
 #include "Ai/Dungeon/DungeonClear/Util/DcPartyState.h"
 #include "Ai/Dungeon/DungeonClear/Util/DcPullPlanner.h"
+#include "Ai/Dungeon/DungeonClear/Util/DcReleaseRecovery.h"
 #include "Ai/Dungeon/DungeonClear/Util/DcRun.h"
 #include "Ai/Dungeon/DungeonClear/Util/DcRunProgress.h"
 #include "Ai/Dungeon/DungeonClear/Util/DcStatusPublisher.h"
@@ -219,6 +220,14 @@ namespace DcStrandedRecovery
         // rescue teleport would pull controllers off their pieces. Stamped, so the
         // failsafe re-arms clean when the game ends.
         if (DcKarazhan::ChessIsOn(bot))
+        {
+            DcRunProgress::Stamp(run.progress, now);
+            return false;
+        }
+
+        // A released bot walking back is out of range because it has a walk to do, with
+        // its own limit; a rescue would teleport it there instead.
+        if (DcReleaseRecovery::HasWalkers(run))
         {
             DcRunProgress::Stamp(run.progress, now);
             return false;

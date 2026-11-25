@@ -48,6 +48,13 @@ namespace DcRel
     // otherwise. Below AllCleared (a finished run should congratulate + disable,
     // not teleport). See Util/DcStrandedRecovery.
     inline constexpr float StrandedRecovery = 42.0f; // leader: rescue a stuck member
+    // Release and walk back (non-combat; see Util/DcReleaseDecision.h). The walk owns
+    // the released bot's every tick: for a follower above the follow / camp / rez
+    // rungs, for the TANK above its whole driving ladder, which from the checkpoint
+    // would start a solo pull. Above StrandedRecovery, which must not teleport it.
+    // ReleaseDue is one opcode on a corpse's session and never competes for long.
+    inline constexpr float WalkBack        = 43.0f;  // released bot: back to the party
+    inline constexpr float ReleaseDue      = 43.5f;  // terminal driver: release a due body
     inline constexpr float HealReposition  = 41.0f;  // healer-only; both engines (see note below)
 
     // ===== non-combat leader driving ladder =====

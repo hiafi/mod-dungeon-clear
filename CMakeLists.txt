@@ -15,6 +15,10 @@
 
 AC_ADD_SCRIPT("${CMAKE_CURRENT_LIST_DIR}/src")
 
+# New files added: Util/DcReleaseDecision.h, Util/DcReleaseRecovery.{h,cpp}
+#   (release and walk back - the pure kernel, edge-pinned by t/TestReleaseDecision,
+#    and its engine glue)
+
 # New files added: Data/HealLeashRegistry.{h,cpp}
 #   (per-map camp leash for the healer LOS reposition — Karazhan's Banquet Hall,
 #    where healers chasing DPS onto the ballroom floor aggroed idle packs.)

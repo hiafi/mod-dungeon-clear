@@ -159,6 +159,11 @@ public:
     // Drive every live job from the global playerbots tick (world thread).
     void Tick(uint32 diff);
 
+    // Is `leader` the tank of a `.dc test` run being monitored right now (the match
+    // OnRunDisabled makes), and where was it dropped in? Map-thread safe. A Pull Lab
+    // party is not one.
+    bool TestRunStart(ObjectGuid leader, float& x, float& y, float& z) const;
+
     // Observer: every DisableDungeonClear lands here; routed to the monitoring
     // job whose leader tank matches (no-op otherwise).
     void OnRunDisabled(Player* leader, std::string const& reason);
