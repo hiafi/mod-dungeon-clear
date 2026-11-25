@@ -40,6 +40,8 @@ While enabled, the tank bot handles a run end to end:
   Druid remains, the run holds while they resurrect the fallen and resumes once
   everyone is back up, instead of ending on the first death (`DungeonClear.PostCombatRez`).
   The run still ends on a full wipe, with no living resurrector, or on timeout.
+  In `.dc test` runs a bot nobody raised for 30 seconds releases at the instance's
+  checkpoint and walks back instead (`DungeonClear.ReleaseWalkBack`).
 
 **Heroic difficulty** is supported: the tank pulls more carefully, several
 settings carry their own heroic values, and a few events fire only on heroic.

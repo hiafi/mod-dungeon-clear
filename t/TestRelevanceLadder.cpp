@@ -107,6 +107,25 @@ TEST(DungeonClearRelevanceTest, StrandedRecoveryOutranksTheFrozenDrivingLadder)
     EXPECT_GT(DcRel::StrandedRecovery, DcRel::Advance);
 }
 
+TEST(DungeonClearRelevanceTest, WalkBackOwnsTheReleasedBot)
+{
+    // The tank's ladder, revived at the checkpoint, would drive at the next boss alone;
+    // a follower's would follow, camp, rez or be rescued by a teleport. The walk goes
+    // first, but never over the run's own end.
+    EXPECT_GT(DcRel::WalkBack, DcRel::StrandedRecovery);
+    EXPECT_GT(DcRel::WalkBack, DcRel::HealReposition);
+    EXPECT_GT(DcRel::WalkBack, DcRel::TransitPack);
+    EXPECT_GT(DcRel::WalkBack, DcRel::Pull);
+    EXPECT_GT(DcRel::WalkBack, DcRel::RezParty);
+    EXPECT_GT(DcRel::WalkBack, DcRel::EventDue);
+    EXPECT_GT(DcRel::WalkBack, DcRel::AtBoss);
+    EXPECT_GT(DcRel::WalkBack, DcRel::FollowTank);
+    EXPECT_GT(DcRel::WalkBack, DcRel::Advance);
+    EXPECT_GT(DcRel::ReleaseDue, DcRel::WalkBack);
+    EXPECT_LT(DcRel::ReleaseDue, DcRel::AllCleared);
+    EXPECT_LT(DcRel::ReleaseDue, DcRel::PartyDied);
+}
+
 TEST(DungeonClearRelevanceTest, RezPartyOutranksEveryLadderItCanLandOn)
 {
     // The elected rezzer may be the LEADER (a prot paladin raising its healer)

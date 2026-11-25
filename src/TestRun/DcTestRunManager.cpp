@@ -529,6 +529,7 @@ void DcTestRunManager::Tick(uint32 diff)
                     outcome.durationS = rec.durationS;
                     outcome.bossesKilled = rec.bossesKilled;
                     outcome.bossesTotal = rec.bossesTotal;
+                    outcome.releases = static_cast<std::uint32_t>(rec.releases.size());
                     outcome.bossRoster = rec.bossRoster;
                     outcome.wipeOpponent = rec.wipeOpponent;
                     outcome.wipeOnBoss = rec.wipeOnBoss;
@@ -577,6 +578,18 @@ void DcTestRunManager::WriteLiveStatus()
     if (!f.is_open())
         return;
     f << json << '\n';
+}
+
+bool DcTestRunManager::TestRunStart(ObjectGuid leader, float& x, float& y, float& z) const
+{
+    std::lock_guard<std::mutex> lock(_runsMutex);
+    for (auto const& job : _runs)
+        if (job->TankGuid() == leader && job->IsMonitoring())
+        {
+            job->GetStart(x, y, z);
+            return true;
+        }
+    return false;
 }
 
 void DcTestRunManager::OnRunDisabled(Player* leader, std::string const& reason)

@@ -82,6 +82,18 @@ namespace DcTestRunRecord
         bool onBoss = false;       // opponent is a roster/flagged boss
     };
 
+    // One bot that nobody raised: it released and walked back to the party
+    // (DcRunState::releaseLog). A run with one of these is not a clean clear.
+    struct ReleaseEntry
+    {
+        std::uint32_t t = 0;       // seconds since run start
+        std::string name;
+        std::uint32_t deadS = 0;   // out-of-combat seconds the body lay first
+        std::string why;           // why no resurrection
+        std::string outcome;       // "arrived" | "died" | "timeout" | "failed" | "walking" (run ended first)
+        std::uint32_t walkS = 0;   // seconds walked, fights excluded
+    };
+
     // One rare-or-better item a party member received during the run. Stamped
     // from the core's loot hooks the moment the item lands in a bag: a won
     // group-loot roll (roll = "need" | "greed") or a direct pickup off a corpse
@@ -165,7 +177,8 @@ namespace DcTestRunRecord
         //     compare them with a full-dungeon run of the same map.
         // 14: added loot (rare-or-better items received, and how: need/greed
         //     roll or a direct pickup).
-        std::uint32_t schema = 14;
+        // 15: added releaseCount and releases (bots that released and walked back).
+        std::uint32_t schema = 15;
         std::string runId;
         std::string planId;       // owning `.dc test plan`, "" for ad-hoc runs
         std::string dungeon;      // registry token
@@ -206,6 +219,7 @@ namespace DcTestRunRecord
         std::vector<std::string> bossRoster;
         std::vector<BossKill> bossTimeline;
         std::vector<DeathEntry> deaths;
+        std::vector<ReleaseEntry> releases;
         std::vector<LootEntry> loot;
         std::vector<PullEntry> pulls;
         // Pulls past kPullLog that were not kept. A run that re-pulls the same

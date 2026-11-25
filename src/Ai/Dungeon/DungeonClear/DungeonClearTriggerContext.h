@@ -28,6 +28,8 @@ public:
         creators["dungeon clear rez party"] = &DungeonClearTriggerContext::rez_party;
         creators["dungeon clear all cleared"] = &DungeonClearTriggerContext::all_cleared;
         creators["dungeon clear recover stranded"] = &DungeonClearTriggerContext::recover_stranded;
+        creators["dungeon clear release due"] = &DungeonClearTriggerContext::release_due;
+        creators["dungeon clear walk back"] = &DungeonClearTriggerContext::walk_back;
         creators["dungeon clear stalled"] = &DungeonClearTriggerContext::stalled;
         creators["dungeon clear follow tank"] = &DungeonClearTriggerContext::follow_tank;
         creators["dungeon clear door blocked"] = &DungeonClearTriggerContext::door_blocked;
@@ -87,6 +89,8 @@ private:
     static Trigger* party_died(PlayerbotAI* ai) { return new DungeonClearPartyDiedTrigger(ai); }
     static Trigger* rez_party(PlayerbotAI* ai) { return new DungeonClearRezPartyTrigger(ai); }
     static Trigger* all_cleared(PlayerbotAI* ai) { return new DungeonClearAllClearedTrigger(ai); }
+    static Trigger* release_due(PlayerbotAI* ai) { return new DungeonClearReleaseDueTrigger(ai); }
+    static Trigger* walk_back(PlayerbotAI* ai) { return new DungeonClearWalkBackTrigger(ai); }
     static Trigger* recover_stranded(PlayerbotAI* ai) { return new DungeonClearRecoverStrandedTrigger(ai); }
     static Trigger* stalled(PlayerbotAI* ai) { return new DungeonClearStalledTrigger(ai); }
     static Trigger* follow_tank(PlayerbotAI* ai) { return new DungeonClearFollowTankTrigger(ai); }

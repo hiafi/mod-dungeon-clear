@@ -714,3 +714,156 @@ TEST(DcRezDecisionTest, ABlockOverTheLeadersCorpseHoldsPastTheWait)
     EXPECT_EQ(lifted.reason, Reason::Recovering);
     EXPECT_EQ(lifted.targetIdx, 0);
 }
+
+// ---- release and walk back (DcReleaseDecision) -----------------------------------
+
+namespace
+{
+    // The healer and the paladin tank are down: nobody standing can resurrect, and the
+    // quiet grace is over (the NoRezzer verdict on an ordinary run).
+    std::vector<Member> RezzersDownParty()
+    {
+        auto party = BaseParty();
+        party[0].isDead = true;
+        party[0].isLeader = true;
+        party[1].isDead = true;
+        return party;
+    }
+}
+
+TEST(DcRezDecisionTest, NoRezzerHoldsWhileABodyWillRelease)
+{
+    Inputs in = BaseInputs();
+    EXPECT_EQ(Decide(in, RezzersDownParty()).reason, Reason::NoRezzer);
+    EXPECT_EQ(Decide(in, RezzersDownParty()).outcome, Outcome::Disable);
+
+    in.releasePending = true;
+    Result const r = Decide(in, RezzersDownParty());
+    EXPECT_EQ(r.outcome, Outcome::Hold);
+    EXPECT_EQ(r.reason, Reason::AwaitingRelease);
+    EXPECT_EQ(r.targetIdx, 1);   // the healer, for the status line
+    EXPECT_EQ(r.rezzerIdx, -1);
+}
+
+TEST(DcRezDecisionTest, TheNoRezzerHoldCapDoesNotCutAPendingRelease)
+{
+    Inputs in = BaseInputs();
+    in.noRezzerSinceMs = 10000;
+    in.noRezzerHoldMaxMs = 60000;   // long past: the cap is spent
+    in.releasePending = true;
+    EXPECT_EQ(Decide(in, RezzersDownParty()).reason, Reason::AwaitingRelease);
+}
+
+TEST(DcRezDecisionTest, TheFightStillOwnsTheNoRezzerHold)
+{
+    Inputs in = BaseInputs();
+    in.releasePending = true;
+    in.partyEngaged = true;
+    in.noRezzerHoldMaxMs = 60000;
+    EXPECT_EQ(Decide(in, RezzersDownParty()).reason, Reason::NoRezzerInFight);
+}
+
+TEST(DcRezDecisionTest, AWipeIsAWipeWhateverIsPending)
+{
+    auto party = BaseParty();
+    for (Member& m : party)
+        m.isDead = true;
+    Inputs in = BaseInputs();
+    in.releasePending = true;
+    EXPECT_EQ(Decide(in, party).outcome, Outcome::Disable);
+    EXPECT_EQ(Decide(in, party).reason, Reason::Wipe);
+    in.regroupOnWipe = true;        // raids and the Oculus regroup exactly as before
+    EXPECT_EQ(Decide(in, party).outcome, Outcome::Regroup);
+
+    auto raid = BaseParty();
+    for (std::size_t i = 0; i + 1 < raid.size(); ++i)
+        raid[i].isDead = true;
+    in.wipeFractionPct = 80;
+    EXPECT_EQ(Decide(in, raid).outcome, Outcome::Regroup);
+}
+
+TEST(DcRezDecisionTest, AnEncounterBlockIsUnchangedByAPendingRelease)
+{
+    auto party = BaseParty();
+    party[2].isDead = true;
+    Inputs in = BaseInputs();
+    in.rezBlocked = true;
+    in.blockedSinceMs = in.nowMs - 5000;
+    in.blockedHoldMaxMs = 20000;
+    in.releasePending = true;
+    EXPECT_EQ(Decide(in, party).reason, Reason::BlockedWaiting);
+    in.blockedSinceMs = in.nowMs - 25000;
+    EXPECT_EQ(Decide(in, party).reason, Reason::BlockedStandDown);
+    EXPECT_EQ(Decide(in, party).outcome, Outcome::None);
+}
+
+TEST(DcRezDecisionTest, TheRezTimeoutWaitsForAPendingRelease)
+{
+    auto party = BaseParty();
+    party[2].isDead = true;
+    Inputs in = BaseInputs();
+    in.pendingSinceMs = in.nowMs - 95000;
+    EXPECT_EQ(Decide(in, party).reason, Reason::TimedOut);
+    in.releasePending = true;
+    Result const r = Decide(in, party);
+    EXPECT_EQ(r.outcome, Outcome::Hold);
+    EXPECT_EQ(r.reason, Reason::Recovering);  // the rezzer keeps working meanwhile
+}
+
+TEST(DcRezDecisionTest, AnUnsafeBodyThatWillReleaseHoldsInsteadOfStandingDown)
+{
+    auto party = BaseParty();
+    party[2].isDead = true;
+    party[2].corpseUnsafe = true;
+    Inputs in = BaseInputs();
+    EXPECT_EQ(Decide(in, party).outcome, Outcome::None);
+    EXPECT_EQ(Decide(in, party).reason, Reason::UnsafeStandDown);
+    in.releasePending = true;
+    EXPECT_EQ(Decide(in, party).outcome, Outcome::Hold);
+    EXPECT_EQ(Decide(in, party).reason, Reason::AwaitingRelease);
+}
+
+TEST(DcRezDecisionTest, TheFeatureOffIgnoresAPendingRelease)
+{
+    Inputs in = BaseInputs();
+    in.enabled = false;
+    in.releasePending = true;
+    EXPECT_EQ(Decide(in, RezzersDownParty()).reason, Reason::Disabled);
+}
+
+// Review M1. A wiped party's corpses poll their release; the mode may be off and the run
+// a player's. Their evaluations must not start the rez clocks, or the healer somebody
+// raises two minutes later finds its whole budget spent and the run ends on it.
+TEST(DcRezDecisionTest, ACorpsesEvaluationNeverStartsTheRezClock)
+{
+    EXPECT_FALSE(DcRezDecision::MayAdvance(/*mutate*/ true, /*evaluatorAlive*/ false));
+    EXPECT_FALSE(DcRezDecision::MayAdvance(false, true));
+    EXPECT_TRUE(DcRezDecision::MayAdvance(true, true));
+
+    std::uint32_t clock = 0;
+    std::uint32_t now = 5000;
+    for (int i = 0; i < 120; ++i, now += 1000)  // two minutes of dead polls
+        clock = DcRezDecision::PendingClock(clock, now, DcRezDecision::MayAdvance(true, false), false);
+    EXPECT_EQ(clock, 0u);
+
+    // The healer is raised and evaluates: the budget starts here.
+    clock = DcRezDecision::PendingClock(clock, now, DcRezDecision::MayAdvance(true, true), false);
+    EXPECT_EQ(clock, now);
+    auto party = BaseParty();
+    party[0].isDead = true;
+    party[2].isDead = true;
+    Inputs in = BaseInputs();
+    in.nowMs = now;
+    in.pendingSinceMs = clock;
+    EXPECT_EQ(Decide(in, party).reason, Reason::Recovering);
+}
+
+TEST(DcRezDecisionTest, ThePendingClockStartsStopsAndKeeps)
+{
+    using DcRezDecision::PendingClock;
+    EXPECT_EQ(PendingClock(0, 7000, true, false), 7000u);
+    EXPECT_EQ(PendingClock(7000, 9000, true, false), 7000u);
+    EXPECT_EQ(PendingClock(7000, 9000, true, true), 0u);    // a fight, a block, a walk back
+    EXPECT_EQ(PendingClock(7000, 9000, false, true), 7000u);  // read-only: untouched
+    EXPECT_EQ(PendingClock(0, 0, true, false), 1u);         // 0 means "not running"
+}

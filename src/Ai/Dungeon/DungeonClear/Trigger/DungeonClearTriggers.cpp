@@ -44,6 +44,7 @@
 #include "Ai/Dungeon/DungeonClear/Util/DcPlayerbotCompat.h"
 #include "Ai/Dungeon/DungeonClear/Util/DcRegroupDecision.h"
 #include "Ai/Dungeon/DungeonClear/Util/DcRaidMuster.h"
+#include "Ai/Dungeon/DungeonClear/Util/DcReleaseRecovery.h"
 #include "Ai/Dungeon/DungeonClear/Util/DcRezRecovery.h"
 #include "Ai/Dungeon/DungeonClear/Util/DcBreathProvision.h"
 #include "Ai/Dungeon/DungeonClear/Util/DcStrandedRecovery.h"
@@ -911,7 +912,11 @@ bool DungeonClearPartyDiedTrigger::IsActive()
     if (!IsTerminalDriver(bot))
         return false;
 
-    bool anyDead = bot->isDead();
+    // A released bot on its way back can end the run too (its walk limit), with
+    // nobody dead.
+    Player* const owner = DcLeaderSignal::FindRunOwner(bot);
+    PlayerbotAI* const ownerAI = owner ? GET_PLAYERBOT_AI(owner) : nullptr;
+    bool anyDead = bot->isDead() || (ownerAI && DcReleaseRecovery::HasWalkers(DcRun::Of(ownerAI)));
     if (!anyDead)
     {
         Group* group = bot->GetGroup();
@@ -975,6 +980,20 @@ bool DungeonClearRezPartyTrigger::IsActive()
     return plan.verdict.outcome == DcRezDecision::Outcome::Hold &&
            plan.verdict.reason == DcRezDecision::Reason::Recovering &&
            !DcRezRecovery::PairedTargetFor(plan, bot).IsEmpty();
+}
+
+bool DungeonClearReleaseDueTrigger::IsActive()
+{
+    if (!bot || bot->isDead() || bot->IsInCombat() || !IsTerminalDriver(bot))
+        return false;
+    return DcReleaseRecovery::DueBody(bot) != nullptr;
+}
+
+bool DungeonClearWalkBackTrigger::IsActive()
+{
+    // MayDrive, as in follow-tank: a phantom flag must not stop the walk.
+    return bot && !bot->isDead() && !bot->GetVehicle() && DcReleaseRecovery::IsWalkingBack(bot) &&
+           MayDrive(bot, context);
 }
 
 bool DungeonClearAllClearedTrigger::IsActive()

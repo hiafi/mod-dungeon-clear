@@ -34,6 +34,8 @@ public:
         creators["dungeon clear disable on cleared"] = &DungeonClearActionContext::disable_on_cleared;
         creators["dungeon clear break stuck combat"] = &DungeonClearActionContext::break_stuck_combat;
         creators["dungeon clear recover stranded"] = &DungeonClearActionContext::recover_stranded;
+        creators["dungeon clear release due"] = &DungeonClearActionContext::release_due;
+        creators["dungeon clear walk back"] = &DungeonClearActionContext::walk_back;
         creators["dungeon clear door blocked"] = &DungeonClearActionContext::door_blocked;
         creators["dungeon clear door reopened"] = &DungeonClearActionContext::door_reopened;
         creators["dungeon clear filter loot"] = &DungeonClearActionContext::filter_loot;
@@ -103,6 +105,8 @@ private:
     static Action* rez_party(PlayerbotAI* ai) { return new DungeonClearRezPartyAction(ai); }
     static Action* disable_on_cleared(PlayerbotAI* ai) { return new DungeonClearDisableOnClearedAction(ai); }
     static Action* break_stuck_combat(PlayerbotAI* ai) { return new DungeonClearBreakStuckCombatAction(ai); }
+    static Action* release_due(PlayerbotAI* ai) { return new DungeonClearReleaseDueAction(ai); }
+    static Action* walk_back(PlayerbotAI* ai) { return new DungeonClearWalkBackAction(ai); }
     static Action* recover_stranded(PlayerbotAI* ai) { return new DungeonClearRecoverStrandedAction(ai); }
     static Action* door_blocked(PlayerbotAI* ai) { return new DungeonClearDoorBlockedAction(ai); }
     static Action* door_reopened(PlayerbotAI* ai) { return new DcResumeOnDoorOpenedAction(ai); }

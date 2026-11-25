@@ -1707,11 +1707,22 @@ void DcTestRunJob::CaptureExtras(Player* tank)
     PlayerbotAI* tankAI = tank ? GET_PLAYERBOT_AI(tank) : nullptr;
     if (!tankAI)
         return;
-    std::vector<DcTestExtra> const& live = DcRun::Of(tankAI->GetAiObjectContext()).testExtras;
+    DcRunState const& run = DcRun::Of(tankAI->GetAiObjectContext());
+    std::vector<DcTestExtra> const& live = run.testExtras;
     _record.extras.clear();
     _record.extras.reserve(live.size());
     for (DcTestExtra const& e : live)
         _record.extras.push_back({e.key, e.value, e.numeric});
+
+    // The stamps are the map thread's clock; place them on the run's own.
+    uint32 const now = getMSTime();
+    _record.releases.clear();
+    for (DcReleaseLogEntry const& e : run.releaseLog)
+    {
+        uint32 const agoMs = getMSTimeDiff(e.atMs, now);
+        _record.releases.push_back({(_totalMs > agoMs ? _totalMs - agoMs : 0) / 1000, e.name, e.deadS, e.why,
+                                    e.outcome.empty() ? "walking" : e.outcome, e.walkS});
+    }
 }
 
 // File a death for every member who went from standing to a corpse since the
@@ -2652,9 +2663,9 @@ void DcTestRunJob::Teardown()
     if (!_lab)
         DcTestRunRecord::Append(_record);
 
-    LOG_INFO("playerbots.dungeonclear", "TESTRUN END {} result={} reason={} bosses={}/{} duration={}s",
+    LOG_INFO("playerbots.dungeonclear", "TESTRUN END {} result={} reason={} bosses={}/{} duration={}s releases={}",
              _record.runId, _record.result, _record.failReason,
-             _record.bossesKilled, _record.bossesTotal, _record.durationS);
+             _record.bossesKilled, _record.bossesTotal, _record.durationS, _record.releases.size());
 
     if (gm && _lab)
         ChatHandler(gm->GetSession()).SendSysMessage(Acore::StringFormat(
@@ -2662,8 +2673,9 @@ void DcTestRunJob::Teardown()
             _record.failReason.empty() ? "" : (" — " + _record.failReason)));
     else if (gm)
         ChatHandler(gm->GetSession()).SendSysMessage(Acore::StringFormat(
-            "Test run {}: {} ({}/{} bosses, {}s){}", _record.dungeon, _record.result,
+            "Test run {}: {} ({}/{} bosses, {}s{}){}", _record.dungeon, _record.result,
             _record.bossesKilled, _record.bossesTotal, _record.durationS,
+            _record.releases.empty() ? "" : ", " + std::to_string(_record.releases.size()) + " released",
             _record.failReason.empty() ? "" : (" — " + _record.failReason)));
 
     _done = true;  // manager erases this job (and releases its reservations) next tick

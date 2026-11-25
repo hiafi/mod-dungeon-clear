@@ -183,6 +183,20 @@ namespace DcTestRunRecord
             s << ",\"opponentEntry\":" << d.opponentEntry
               << ",\"onBoss\":" << (d.onBoss ? "true" : "false") << '}';
         }
+        s << "],\"releaseCount\":" << rec.releases.size() << ",\"releases\":[";
+        for (std::size_t i = 0; i < rec.releases.size(); ++i)
+        {
+            ReleaseEntry const& r = rec.releases[i];
+            if (i)
+                s << ',';
+            s << "{\"t\":" << r.t << ",\"name\":";
+            AppendEscaped(s, r.name);
+            s << ",\"deadS\":" << r.deadS << ",\"why\":";
+            AppendEscaped(s, r.why);
+            s << ",\"outcome\":";
+            AppendEscaped(s, r.outcome);
+            s << ",\"walkS\":" << r.walkS << '}';
+        }
         s << "],\"loot\":[";
         for (std::size_t i = 0; i < rec.loot.size(); ++i)
         {

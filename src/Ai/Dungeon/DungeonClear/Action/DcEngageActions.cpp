@@ -2794,6 +2794,14 @@ bool DungeonClearDisableOnDeathAction::Execute(Event /*event*/)
             reason = "Couldn't get " + deadName + " resurrected in time \xe2\x80\x94 dungeon clear "
                      "disabled. Type 'dc on' when ready to resume.";
             break;
+        case DcRezDecision::Reason::WalkTimedOut:
+            reason = plan.walkerName + " released but couldn't walk back to the party in time \xe2\x80\x94 "
+                     "dungeon clear disabled. Type 'dc on' when ready to resume.";
+            break;
+        case DcRezDecision::Reason::ReleaseFailed:
+            reason = plan.walkerName + " released but no checkpoint revived them \xe2\x80\x94 dungeon clear "
+                     "disabled. Type 'dc on' when ready to resume.";
+            break;
         default:
             // Feature off (Reason::Disabled) or a race resolved the deaths
             // between trigger and action — the classic message.

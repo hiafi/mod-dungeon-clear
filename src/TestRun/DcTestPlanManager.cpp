@@ -828,16 +828,19 @@ void DcTestPlanManager::Finalize(Plan& plan)
     uint32 const durationS = static_cast<uint32>((nowMs - plan.startedAtMs) / 1000);
 
     LOG_INFO("playerbots.dungeonclear",
-             "TESTPLAN END {} result={} runs={}/{} ok={} fail={} duration={}s{}",
+             "TESTPLAN END {} result={} runs={}/{} ok={} (with releases: {}) fail={} duration={}s{}",
              plan.spec.planId, result, stats.launched,
              plan.spec.endless ? std::string("∞") : std::to_string(plan.spec.total),
-             stats.succeeded, stats.failed, durationS,
+             stats.succeeded, stats.succeededWithReleases, stats.failed, durationS,
              plan.abortReason.empty() ? std::string() : (" reason=" + plan.abortReason));
 
     if (Player* gm = ObjectAccessor::FindConnectedPlayer(plan.gmGuid))
         ChatHandler(gm->GetSession()).SendSysMessage(Acore::StringFormat(
-            "Test plan {} {}: {} — {}/{} runs succeeded{}{}",
+            "Test plan {} {}: {} — {}/{} runs succeeded{}{}{}",
             plan.spec.planId, PlanLabel(plan), result, stats.succeeded, stats.launched,
+            stats.succeededWithReleases
+                ? Acore::StringFormat(" ({} with releases, not clean)", stats.succeededWithReleases)
+                : std::string(),
             stats.succeeded ? Acore::StringFormat(", median {}s", stats.medianS) : std::string(),
             plan.abortReason.empty() ? std::string() : (" — " + plan.abortReason)));
 }

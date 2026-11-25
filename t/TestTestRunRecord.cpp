@@ -187,6 +187,23 @@ TEST(DcTestRunRecordTest, LootKeyIsPresentWhenEmpty)
     EXPECT_NE(ToJsonl(SampleRecord()).find("\"loot\":[]"), std::string::npos);
 }
 
+TEST(DcTestRunRecordTest, ReleasesSerializeAndAreCounted)
+{
+    EXPECT_NE(ToJsonl(SampleRecord()).find("\"releaseCount\":0,\"releases\":[]"), std::string::npos);
+
+    Record r = SampleRecord();
+    r.releases.push_back({412, "Bero", 31, "no living member can resurrect", "arrived", 46});
+    r.releases.push_back({600, "Olanne", 30, "not raised in time", "walking", 0});
+
+    std::string const line = ToJsonl(r);
+    EXPECT_NE(line.find("\"releaseCount\":2,\"releases\":[{\"t\":412,\"name\":\"Bero\",\"deadS\":31,"
+                        "\"why\":\"no living member can resurrect\",\"outcome\":\"arrived\",\"walkS\":46},"
+                        "{\"t\":600,\"name\":\"Olanne\",\"deadS\":30,\"why\":\"not raised in time\","
+                        "\"outcome\":\"walking\",\"walkS\":0}],\"loot\":["),
+              std::string::npos)
+        << line;
+}
+
 TEST(DcTestRunRecordTest, BossRosterSerializesInProgressionOrder)
 {
     Record r = SampleRecord();
@@ -199,14 +216,15 @@ TEST(DcTestRunRecordTest, BossRosterSerializesInProgressionOrder)
               std::string::npos);
 }
 
-TEST(DcTestRunRecordTest, SchemaIsFourteen)
+TEST(DcTestRunRecordTest, SchemaIsFifteen)
 {
     // 12: added combatHolders[].trigger, and with it a change of meaning in the
     // sibling `legitimate` field — a trigger creature now sinks the verdict.
     // 13: added the scenario block (scenario/scenarioOf/focus/successBy/
     // tailPending/extras).
     // 14: added loot.
-    EXPECT_NE(ToJsonl(SampleRecord()).find("\"schema\":14"), std::string::npos);
+    // 15: added releaseCount / releases.
+    EXPECT_NE(ToJsonl(SampleRecord()).find("\"schema\":15"), std::string::npos);
     EXPECT_NE(ToJsonl(SampleRecord()).find("\"size\":"), std::string::npos);
 }
 
@@ -434,13 +452,21 @@ TEST(DcRunStateTelemetryTest, TelemetrySurvivesResetUntilExplicitlyCleared)
     rs.BumpEventProgress();
     rs.BumpEventProgress();
     rs.SetTestExtra("looted", "true");
+    rs.releaseLog.push_back({});
+    rs.release.members.emplace_back();
+    rs.release.members.back().walking = true;
     rs.Reset();
     EXPECT_FALSE(rs.enabled);
     EXPECT_EQ(rs.eventProgressSeq, 2u);
     ASSERT_EQ(rs.testExtras.size(), 1u);
     EXPECT_EQ(rs.testExtras[0].key, "looted");
 
+    // The release log is telemetry; who is walking back is the run's own state.
+    EXPECT_EQ(rs.releaseLog.size(), 1u);
+    EXPECT_TRUE(rs.release.members.empty());
+
     rs.ClearTestTelemetry();
     EXPECT_EQ(rs.eventProgressSeq, 0u);
     EXPECT_TRUE(rs.testExtras.empty());
+    EXPECT_TRUE(rs.releaseLog.empty());
 }

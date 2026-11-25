@@ -104,6 +104,22 @@ FAIL_RULES = [
         "run disabled: couldn't get <bot> resurrected in time — killed by <mob>",
     ),
     (
+        "walk_back_timeout",
+        re.compile(
+            r"^run disabled: (?P<victim>.+?) released but couldn't walk back to the party in time"
+            r"(?: — killed by (?:trash: )?(?P<opponent>.+?))?$"
+        ),
+        "run disabled: <bot> released but couldn't walk back in time",
+    ),
+    (
+        "release_failed",
+        re.compile(
+            r"^run disabled: (?P<victim>.+?) released but no checkpoint revived them"
+            r"(?: — killed by (?:trash: )?(?P<opponent>.+?))?$"
+        ),
+        "run disabled: <bot> released but no checkpoint revived them",
+    ),
+    (
         "left_dungeon",
         re.compile(r"^run disabled: Left the dungeon.*$"),
         "run disabled: left the dungeon",
@@ -351,6 +367,20 @@ CREATE TABLE IF NOT EXISTS deaths (
     PRIMARY KEY (run_id, idx)
 );
 CREATE INDEX IF NOT EXISTS idx_deaths_opponent ON deaths (opponent);
+
+-- Bots nobody raised, that released and walked back (run schema 15). A successful
+-- run with a row here is not a clean clear.
+CREATE TABLE IF NOT EXISTS releases (
+    run_id          TEXT NOT NULL REFERENCES runs (run_id) ON DELETE CASCADE,
+    idx             INTEGER NOT NULL,
+    t               INTEGER,
+    name            TEXT,
+    dead_s          INTEGER,
+    why             TEXT,
+    outcome         TEXT,
+    walk_s          INTEGER,
+    PRIMARY KEY (run_id, idx)
+);
 
 CREATE TABLE IF NOT EXISTS boss_kills (
     run_id          TEXT NOT NULL REFERENCES runs (run_id) ON DELETE CASCADE,
@@ -825,6 +855,20 @@ JOIN v_runs r ON r.run_id = c.run_id
 GROUP BY c.class, c.role, r.dungeon, r.heroic
 ORDER BY runs DESC;
 
+-- Successes that needed a release, beside the clean ones.
+DROP VIEW IF EXISTS v_clean_by_dungeon;
+CREATE VIEW v_clean_by_dungeon AS
+SELECT r.dungeon, r.heroic,
+       COUNT(*)                                       AS runs,
+       SUM(r.ok)                                      AS succeeded,
+       SUM(r.ok AND x.n IS NULL)                      AS clean,
+       SUM(r.ok AND x.n IS NOT NULL)                  AS with_releases,
+       SUM(COALESCE(x.n, 0))                          AS releases
+FROM v_runs r
+LEFT JOIN (SELECT run_id, COUNT(*) AS n FROM releases GROUP BY run_id) x ON x.run_id = r.run_id
+GROUP BY r.dungeon, r.heroic
+ORDER BY runs DESC;
+
 -- Which bots die most, and to what.
 DROP VIEW IF EXISTS v_death_toll;
 CREATE VIEW v_death_toll AS
@@ -979,7 +1023,7 @@ def attribute_deploy(conn, repo_label="module"):
 # ingest
 # ---------------------------------------------------------------------------
 CHILD_TABLES = [
-    "run_comp", "pulls", "deaths", "boss_kills", "status_timeline",
+    "run_comp", "pulls", "deaths", "releases", "boss_kills", "status_timeline",
     "pauses", "boss_roster", "diag_roster", "diag_party",
 ]
 
@@ -1229,6 +1273,13 @@ def ingest_run(conn, rec, now):
              d.get("opponentEntry"), b(d.get("onBoss"))),
         )
 
+    for i, r in enumerate(rec.get("releases") or []):
+        conn.execute(
+            "INSERT INTO releases VALUES (?,?,?,?,?,?,?,?)",
+            (run_id, i, r.get("t"), r.get("name"), r.get("deadS"), r.get("why"),
+             r.get("outcome"), r.get("walkS")),
+        )
+
     for i, k in enumerate(rec.get("bossTimeline") or []):
         conn.execute(
             "INSERT INTO boss_kills VALUES (?,?,?,?,?,?)",
@@ -1431,7 +1482,7 @@ def cmd_stats(conn):
           f"  ({one('SELECT MIN(started_at) FROM runs')} .. "
           f"{one('SELECT MAX(started_at) FROM runs')})")
     print(f"  plans: {one('SELECT COUNT(*) FROM plans')}")
-    for table in ["pulls", "deaths", "boss_kills", "status_timeline", "diag_roster"]:
+    for table in ["pulls", "deaths", "releases", "boss_kills", "status_timeline", "diag_roster"]:
         print(f"  {table+':':<17}{one(f'SELECT COUNT(*) FROM {table}')}")
 
     print("\n=== verdicts ===")
@@ -1457,6 +1508,15 @@ def cmd_stats(conn):
     for row in conn.execute(
             "SELECT dungeon, heroic, runs, success_pct FROM v_success_by_dungeon"):
         print(f"  {row[0]:<17} heroic={bool(row[1])!s:<6} n={row[2]:<5} {row[3]}%")
+
+    released = conn.execute(
+        "SELECT dungeon, heroic, succeeded, clean, with_releases, releases "
+        "FROM v_clean_by_dungeon WHERE releases > 0").fetchall()
+    if released:
+        print("\n=== clears that needed a release (not clean) ===")
+        for row in released:
+            print(f"  {row[0]:<17} heroic={bool(row[1])!s:<6} succeeded={row[2]:<4} clean={row[3]:<4} "
+                  f"with_releases={row[4]:<4} releases={row[5]}")
 
     print("\n=== pull calibration (error = observed - predicted, bodies) ===")
     print("    'under' is provable; 'over' is an upper bound (observed is a 1 Hz floor)")

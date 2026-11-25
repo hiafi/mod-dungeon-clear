@@ -127,6 +127,12 @@ namespace DcRezDecision
         bool          rezBlocked = false;
         std::uint32_t blockedSinceMs = 0;    // getMSTime() the block was first seen
         std::uint32_t blockedHoldMaxMs = 0;  // hold this long for it to lift; 0 = don't
+
+        // --- release and walk back (DcReleaseDecision) -------------------------
+        // A body will release by itself and walk back, or one that did is on its way: a
+        // verdict that would end the run over the bodies left (or carry on without
+        // them) holds for that instead. Bounded there.
+        bool          releasePending = false;
     };
 
     enum class Outcome
@@ -150,7 +156,12 @@ namespace DcRezDecision
         TimedOut,        // out-of-combat recovery clock expired
         BlockedWaiting,  // the instance forbids resurrection — hold, it may lift
         BlockedStandDown, // ...it did not lift; carry on short-handed, do not disable
-        UnsafeStandDown   // every corpse lies among idle hostiles; carry on short-handed
+        UnsafeStandDown,  // every corpse lies among idle hostiles; carry on short-handed
+        AwaitingRelease,  // nobody can raise the body; it will release and walk back
+        // The glue's verdicts over a walk, which no corpse is part of (DcReleaseRecovery).
+        WalkingBack,      // a released bot is on its way; hold
+        WalkTimedOut,     // ...and did not make it inside its limit
+        ReleaseFailed     // a release did not bring the bot back; never retried
     };
 
     struct Result
@@ -169,6 +180,24 @@ namespace DcRezDecision
         // Hold/Recovering only.
         std::vector<std::pair<int, int>> pairs;  // {rezzerIdx, targetIdx}
     };
+
+    // Who may advance the recovery clocks: a living member's evaluation. A corpse that
+    // asks something about the run (its release poll) must not start the 90s budget of a
+    // rezzer that is not standing yet, nor spend the episode's announcement.
+    inline bool MayAdvance(bool mutate, bool evaluatorAlive)
+    {
+        return mutate && evaluatorAlive;
+    }
+
+    // The pending clock's next value. Stopped by anything that keeps a rez from starting.
+    inline std::uint32_t PendingClock(std::uint32_t sinceMs, std::uint32_t nowMs, bool advance, bool stopped)
+    {
+        if (!advance)
+            return sinceMs;
+        if (stopped)
+            return 0;
+        return sinceMs ? sinceMs : (nowMs ? nowMs : 1);
+    }
 
     // Target priority: dead healer -> dead tank -> group order. The healer
     // back up first restores the party's ability to survive the next mistake;
@@ -417,6 +446,13 @@ namespace DcRezDecision
                 r.targetIdx = PickTarget(members);
                 return r;
             }
+            if (in.releasePending)
+            {
+                r.outcome = Outcome::Hold;
+                r.reason = Reason::AwaitingRelease;
+                r.targetIdx = PickTarget(members);
+                return r;
+            }
             r.outcome = Outcome::Disable;
             r.reason = Reason::NoRezzer;
             return r;
@@ -447,8 +483,8 @@ namespace DcRezDecision
             if (!anySafeCorpse)
             {
                 r.targetIdx = PickTarget(members);
-                r.outcome = Outcome::None;
-                r.reason = Reason::UnsafeStandDown;
+                r.outcome = in.releasePending ? Outcome::Hold : Outcome::None;
+                r.reason = in.releasePending ? Reason::AwaitingRelease : Reason::UnsafeStandDown;
                 return r;
             }
         }
@@ -459,7 +495,9 @@ namespace DcRezDecision
         // Timeout: only while the glue's no-fight clock is running. A fight
         // freezes it (the glue additionally clears the stamp, so a fight resets
         // the budget rather than expiring it early — the safe direction).
-        if (!in.partyEngaged && in.pendingSinceMs != 0 && in.timeoutMs != 0 &&
+        // A body about to release holds it off too: bodies that fell at different
+        // times share this one clock.
+        if (!in.releasePending && !in.partyEngaged && in.pendingSinceMs != 0 && in.timeoutMs != 0 &&
             in.nowMs - in.pendingSinceMs >= in.timeoutMs)
         {
             r.outcome = Outcome::Disable;

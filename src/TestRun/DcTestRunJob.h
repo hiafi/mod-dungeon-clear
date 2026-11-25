@@ -182,6 +182,13 @@ public:
     void OnLoot(DcTestRunRecord::LootEntry entry);
 
     ObjectGuid TankGuid() const { return _tankGuid; }
+    // The catalogue row's drop point (fixed at Create).
+    void GetStart(float& x, float& y, float& z) const
+    {
+        x = _x;
+        y = _y;
+        z = _z;
+    }
     ObjectGuid GmGuid() const { return _gmGuid; }
     std::string const& RunId() const { return _record.runId; }
     std::string const& PlanId() const { return _record.planId; }
@@ -297,8 +304,8 @@ private:
     // ResetCompletionLatchesForNewInstance), and a fill that lapsed would send
     // the raid off to clear the whole map. No-op on a full-dungeon run.
     void ApplyScenarioSkips(Player* tank, AiObjectContext* ctx);
-    // Copy the event-published extras (DcRunState::testExtras on the tank) into
-    // the record. Called every monitor tick and once more at Finish, so a
+    // Copy the event-published extras (DcRunState::testExtras on the tank) and the
+    // release log into the record. Called every monitor tick and once more at Finish, so a
     // leader that vanishes at the end still leaves the last values it wrote.
     void CaptureExtras(Player* tank);
     void TrackDeaths(Player* tank);

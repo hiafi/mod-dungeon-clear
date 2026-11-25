@@ -173,6 +173,17 @@ inline constexpr DcSettingDef kDcSettings[] =
     // scales the work, this scales the clock).
     { "PostCombatRezTimeoutSecs", DcType::UInt,  90, 10, 600,  true, kDcNoHeroic, 180 },
 
+    // Release and walk back: the fallback under PostCombatRez. A bot that lay dead and
+    // unraised for ReleaseAfterSecs of out-of-combat time releases its spirit, is
+    // revived at the instance's checkpoint (mod-dungeon-checkpoint) and walks back; the
+    // run waits for it, at most ReleaseWalkLimitSecs (never on a raid map). ReleaseWalkBack: 0 off, 1 `.dc
+    // test` runs only, 2 every bot run. Server-only: whether a run may recover this way
+    // is the operator's policy, not a per-run preference. See Util/DcReleaseDecision.h.
+    { "ReleaseWalkBack",          DcType::UInt,   1,  0,   2, false },
+    { "ReleaseAfterSecs",         DcType::UInt,  30, 10, 600, false },
+    { "ReleaseWalkLimitSecs",     DcType::UInt, 300, 30, 900, false },
+    { "ReleaseMaxPerBot",         DcType::UInt,   2,  1,  10, false },
+
     // Stranded-member recovery failsafe. The dominant way a run stalls now is a
     // party member falling THROUGH the world geometry (or wedging where the
     // navmesh can't recover): it drifts out of range, the between-pulls spread
