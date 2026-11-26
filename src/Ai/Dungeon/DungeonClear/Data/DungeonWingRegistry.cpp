@@ -36,6 +36,7 @@ namespace
             RegisterMaraudonWings(s);
             RegisterBlackrockSpireWings(s);
             RegisterBlackrockDepthsWings(s);
+            RegisterGnomereganWings(s);
             return s;
         }();
         return store;

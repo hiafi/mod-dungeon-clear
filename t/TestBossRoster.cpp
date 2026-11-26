@@ -46,6 +46,7 @@ TEST(BossRosterRegistryTest, HasPatchOnlyForPatchedMaps)
     EXPECT_TRUE(BossRosterRegistry::HasPatch(189));   // Scarlet Monastery
     EXPECT_TRUE(BossRosterRegistry::HasPatch(109));   // Sunken Temple
     EXPECT_TRUE(BossRosterRegistry::HasPatch(209));   // ZulFarrak
+    EXPECT_TRUE(BossRosterRegistry::HasPatch(90));    // Gnomeregan
     EXPECT_TRUE(BossRosterRegistry::HasPatch(230));   // Blackrock Depths
     EXPECT_TRUE(BossRosterRegistry::HasPatch(36));    // Deadmines
     EXPECT_TRUE(BossRosterRegistry::HasPatch(329));   // Stratholme
@@ -231,6 +232,96 @@ TEST(BossRosterRegistryTest, ZfObjectivesFinishOnTheInstanceState)
         }
     }
     EXPECT_EQ(seen, 5);
+}
+// Gnomeregan, the rework (HANDOFF section 3.12): Techbot, Fallout, Electrocutioner,
+// then the Workshop Door from the inside (the full clear's detour objective, on
+// the Alert System's key and sorted first), the Alert System, Pummeler,
+// Thermaplugg. The DBC bits (Alert 0, Fallout 1, Techbot 2, Electrocutioner 3,
+// Pummeler 4, Thermaplugg 5) would start in the hall behind the sealed door; the
+// kill-bits stay the real ones. Pummeler's anchor moves out of the glass onto the
+// pocket floor, inside the box his pull is accepted from, with his own bit.
+TEST(BossRosterRegistryTest, GnomereganClearOrderAndPummelersFloorAnchor)
+{
+    namespace G = DcGnomeregan;
+    std::vector<DungeonBossInfo> base = {
+        Boss(G::NPC_ALERT_SYSTEM, 0, "The Mobile Alert System", 90),
+        Boss(G::NPC_FALLOUT, 1, "Viscous Fallout", 90),
+        Boss(G::NPC_TECHBOT, 2, "Techbot", 90),
+        Boss(G::NPC_ELECTRO, 3, "Electrocutioner 6000", 90),
+        Boss(G::NPC_PUMMELER, 4, "Crowd Pummeler 9-60", 90),
+        Boss(G::NPC_THERMAPLUGG, 5, "Mekgineer Thermaplugg", 90),
+    };
+    base[4].x = G::PUMMELER_X;
+    base[4].y = G::PUMMELER_Y;
+    base[4].z = G::PUMMELER_Z;
+    std::vector<DungeonBossInfo> out =
+        BossRosterRegistry::Apply(90, DcDiffKey::Dungeon(DUNGEON_DIFFICULTY_NORMAL), base);
+    ASSERT_EQ(out.size(), 7u);
+
+    std::vector<uint32> got;
+    for (DungeonBossInfo const& b : out)
+        got.push_back(b.entry);
+    std::vector<uint32> const want = { G::NPC_TECHBOT, G::NPC_FALLOUT, G::NPC_ELECTRO,
+                                       BossRosterRegistry::ObjectiveEntry(G::OBJ_WORKSHOP_DOOR),
+                                       G::NPC_ALERT_SYSTEM, G::NPC_PUMMELER, G::NPC_THERMAPLUGG };
+    EXPECT_EQ(got, want);
+    for (std::size_t i = 0; i + 1 < out.size(); ++i)
+        EXPECT_LE(BossOrderKey(out[i]), BossOrderKey(out[i + 1])) << i;
+
+    // The kill-bits are the real ones (slot = bit).
+    EXPECT_EQ(Find(out, G::NPC_ALERT_SYSTEM)->encounterIndex, 0u);
+    EXPECT_EQ(Find(out, G::NPC_FALLOUT)->encounterIndex, 1u);
+    EXPECT_EQ(Find(out, G::NPC_TECHBOT)->encounterIndex, 2u);
+    EXPECT_EQ(Find(out, G::NPC_ELECTRO)->encounterIndex, 3u);
+    EXPECT_EQ(Find(out, G::NPC_THERMAPLUGG)->encounterIndex, 5u);
+
+    DungeonBossInfo const* pummeler = Find(out, G::NPC_PUMMELER);
+    ASSERT_NE(pummeler, nullptr);
+    EXPECT_EQ(pummeler->kind, DungeonAnchorKind::Boss);
+    EXPECT_EQ(pummeler->encounterIndex, 4u);
+    EXPECT_EQ(pummeler->doneBossStateIndex, -1);
+    EXPECT_EQ(BossOrderKey(*pummeler), 5u);
+    EXPECT_TRUE(G::InPocketBox(pummeler->x, pummeler->y, pummeler->z));
+    EXPECT_FALSE(G::InPocketBox(G::PUMMELER_X, G::PUMMELER_Y, G::PUMMELER_Z));   // his origin is in the glass
+    // In his melee reach from the floor: sqrt(h^2 + 4.8^2) < 10 + 1.5 + 4/3 (D5's
+    // reach 10); 4.0yd out on the pocket's center line.
+    float const h = std::hypot(pummeler->x - G::PUMMELER_X, pummeler->y - G::PUMMELER_Y);
+    float const dz = pummeler->z - G::PUMMELER_Z;
+    EXPECT_LT(std::sqrt(h * h + dz * dz), 10.0f + 1.5f + 4.0f / 3.0f);
+    EXPECT_GT(h, 3.0f);   // in front of the glass face (x -884.4 at y 364), not in it
+}
+
+// The door objective finishes on the instance reading the door open (data 10,
+// value 2: the full clear's click, a human's, or the Alert System's death), read
+// live, so a re-entered instance with the door open goes straight to the hall.
+TEST(BossRosterRegistryTest, GnomereganDoorObjectiveFinishesOnTheDoorReadingOpen)
+{
+    namespace G = DcGnomeregan;
+    std::vector<DungeonBossInfo> base = { Boss(G::NPC_ALERT_SYSTEM, 0, "The Mobile Alert System", 90) };
+    std::vector<DungeonBossInfo> out =
+        BossRosterRegistry::Apply(90, DcDiffKey::Dungeon(DUNGEON_DIFFICULTY_NORMAL), base);
+    int seen = 0;
+    for (DungeonBossInfo const& o : out)
+    {
+        if (o.kind != DungeonAnchorKind::Objective)
+            continue;
+        ++seen;
+        EXPECT_EQ(o.entry, BossRosterRegistry::ObjectiveEntry(G::OBJ_WORKSHOP_DOOR));
+        EXPECT_EQ(o.eventId, G::EVENT_WORKSHOP_DOOR);
+        EXPECT_EQ(BossOrderKey(o), static_cast<uint32>(G::ORDER_ALERT));
+        EXPECT_EQ(o.doneBossStateIndex, -1);
+        EXPECT_EQ(o.doneInstanceDataId, 10);
+        EXPECT_EQ(o.doneInstanceDataValue, 2u);
+        EXPECT_FALSE(o.optionalByDesign);
+        EXPECT_FALSE(o.skipByDesign);
+        EXPECT_EQ(AnchorDoneByInstanceValues(o, 0, G::WORKSHOP_DOOR_OPEN), DcAnchorDoneVia::InstanceData);
+        EXPECT_EQ(AnchorDoneByInstanceValues(o, 0, G::WORKSHOP_DOOR_UNLOCKED), DcAnchorDoneVia::None);
+        EXPECT_EQ(AnchorDoneByInstanceValues(o, 0, G::WORKSHOP_DOOR_SEALED), DcAnchorDoneVia::None);
+        EXPECT_NEAR(o.x, G::DOOR_INSIDE_X, 0.01f);
+        EXPECT_NEAR(o.y, G::DOOR_INSIDE_Y, 0.01f);
+    }
+    EXPECT_EQ(seen, 1);
+    EXPECT_TRUE(BossRosterRegistry::OptionalEntries(90).empty());   // every anchor is part of the bar
 }
 
 // Hellfire Ramparts (543): the auto-derived list ends at Omor because the final

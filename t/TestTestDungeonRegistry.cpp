@@ -48,7 +48,7 @@ TEST(DcTestDungeonRegistryTest, HeroicLevelMatchesTheExpansionCap)
     // gate, and a heroic run is run at its expansion's cap: TBC rows carry 70,
     // WotLK rows 80. Classic dungeons have no stock heroic difficulty, so 0,
     // except a rework whose heroic is offered to the bots: the classic cap, 60.
-    std::set<std::uint32_t> const classicHeroicMaps = {389, 209};  // Ragefire Chasm, Zul'Farrak
+    std::set<std::uint32_t> const classicHeroicMaps = {389, 209, 90};  // Ragefire Chasm, Zul'Farrak, Gnomeregan
     std::set<std::uint32_t> const tbcMaps =
         {543, 542, 547, 546, 557, 558, 556, 560, 555, 545, 540, 269, 553, 554, 552, 585};
     std::set<std::uint32_t> const wotlkMaps =
@@ -112,6 +112,46 @@ TEST(DcTestDungeonRegistryTest, ZulFarrakRunsAtFortySixAndHeroicAtSixty)
     EXPECT_EQ(row->overallTimeoutS, 0u);
     EXPECT_EQ(Find("209"), row);
     EXPECT_EQ(DungeonWingRegistry::Get(209), nullptr);
+}
+
+// Gnomeregan: the bosses are level 28 (heroic 60). Two Finder sections and the
+// whole dungeon, each its own row on map 90 whose token is the run wing (the
+// Maraudon shape): section 1 and the full clear from area trigger 324's landing,
+// section 2 from the Train Depot. A bare map id names no row (three rows).
+TEST(DcTestDungeonRegistryTest, GnomereganRunsAtTwentyEightInTwoSectionsAndWhole)
+{
+    namespace G = DcGnomeregan;
+    for (char const* token : { "gnomer", "gnomer-s1", "gnomer-s2" })
+    {
+        Row const* row = Find(token);
+        ASSERT_NE(row, nullptr) << token;
+        EXPECT_EQ(row->mapId, 90u) << token;
+        EXPECT_EQ(row->recommendedLevel, 28u) << token;   // was 32: four levels over the bosses
+        EXPECT_EQ(row->heroicLevel, 60u) << token;
+        EXPECT_EQ(row->noProgressS, 0u) << token;
+        EXPECT_EQ(row->overallTimeoutS, 0u) << token;
+        EXPECT_FALSE(DcTestDungeonRegistry::IsScenario(*row)) << token;
+        ASSERT_NE(DungeonWingRegistry::Get(90), nullptr);
+        DungeonWing const* wing = DungeonWingRegistry::FindWing(*DungeonWingRegistry::Get(90), token);
+        ASSERT_NE(wing, nullptr) << token;
+        EXPECT_EQ(wing->token, token);
+    }
+    Row const* whole = Find("gnomer");
+    Row const* s1 = Find("gnomer-s1");
+    Row const* s2 = Find("gnomer-s2");
+    EXPECT_STREQ(whole->wing, "");
+    // Area trigger 324's landing (on the floor), not Finder 14's start 2yd above it.
+    EXPECT_NEAR(whole->x, -329.10f, 0.01f);
+    EXPECT_NEAR(whole->y, -3.21f, 0.01f);
+    EXPECT_NEAR(whole->z, -152.85f, 0.01f);
+    EXPECT_NEAR(s1->x, whole->x, 0.01f);
+    EXPECT_NEAR(s1->y, whole->y, 0.01f);
+    // The Train Depot: area trigger 523's target, Finder 320's start.
+    EXPECT_NEAR(s2->x, -736.51f, 0.01f);
+    EXPECT_NEAR(s2->y, 2.71f, 0.01f);
+    EXPECT_NEAR(s2->z, -249.99f, 0.01f);
+    EXPECT_NEAR(s2->o, G::DEPOT_O, 0.001f);
+    EXPECT_EQ(Find("90"), nullptr);   // a section split map: a token is required
 }
 
 // The pool is the bar's second run (HANDOFF section 3.12): a scenario of `zf`

@@ -906,3 +906,76 @@ TEST(RoomAggroRegistryTest, ZulFarrakUkorzClearsTheMesaAndKeepsRuuzlu)
         EXPECT_TRUE(RoomAggroRegistry::IsRoomTrash(*r, 7268, d + s.wander, r->pullOutRadius)) << s.p.x;
     }
 }
+
+// --- Gnomeregan (90), the rework -------------------------------------------
+// Live spawns (acore_world.creature, 2026-11-26); Fallout at area C (the S0 rev).
+namespace
+{
+    struct GnPos { float x, y, z; };
+
+    float GnDist(GnPos const& a, GnPos const& b)
+    {
+        return std::sqrt((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y) + (a.z - b.z) * (a.z - b.z));
+    }
+}
+
+TEST(RoomAggroRegistryTest, GnomereganFalloutClearsTheCaveRoundAreaC)
+{
+    namespace G = DcGnomeregan;
+    RoomAggroBoss const* r = RoomAggroRegistry::Find(G::MAP_ID, G::NPC_FALLOUT);
+    ASSERT_NE(r, nullptr);
+    EXPECT_FLOAT_EQ(r->radius, G::FALLOUT_ROOM_RADIUS);
+    EXPECT_FLOAT_EQ(r->pullOutRadius, G::FALLOUT_ROOM_PULLOUT);
+    EXPECT_TRUE(r->memberEntries.empty());
+    GnPos const c{ G::FALLOUT_X, G::FALLOUT_Y, G::FALLOUT_Z };
+    // The five in the room, each at its spawn and at its wander's nearest (5yd).
+    for (GnPos const& p : { GnPos{ -398.1f, 137.2f, -210.6f },     // Horror 30260
+                            GnPos{ -373.5f, 131.9f, -208.9f },     // Slime 30146
+                            GnPos{ -409.0f, 107.9f, -210.3f },     // Slime 30259
+                            GnPos{ -407.5f, 159.1f, -209.5f },     // Slime 30263
+                            GnPos{ -380.7f, 97.9f, -210.4f } })    // Horror 30151
+    {
+        float const d = GnDist(c, p);
+        EXPECT_TRUE(RoomAggroRegistry::IsRoomTrash(*r, 6218, d, r->pullOutRadius)) << p.x << ", " << p.y;
+        EXPECT_TRUE(RoomAggroRegistry::IsRoomTrash(*r, 6218, d - 5.0f, r->pullOutRadius)) << p.x << ", " << p.y;
+    }
+    // The Horror's nearest (3.9yd) is still dragged out.
+    EXPECT_LT(r->pullOutRadius, GnDist(c, { -398.1f, 137.2f, -210.6f }) - 5.0f);
+    // Out: Slime 30267 (39.4yd), Lurker 30264 (54.4), and the second room's
+    // Pillager 30227 overhead (14yd off horizontally, 55yd up).
+    EXPECT_GT(GnDist(c, { -429.9f, 138.0f, -211.7f }), r->radius);
+    EXPECT_GT(GnDist(c, { -430.1f, 94.2f, -209.4f }), r->radius);
+    EXPECT_GT(GnDist(c, { -367.3f, 126.7f, -154.7f }), r->radius);
+}
+
+TEST(RoomAggroRegistryTest, GnomereganThermapluggClearsTheConsolePack)
+{
+    namespace G = DcGnomeregan;
+    RoomAggroBoss const* r = RoomAggroRegistry::Find(G::MAP_ID, G::NPC_THERMAPLUGG);
+    ASSERT_NE(r, nullptr);
+    EXPECT_FLOAT_EQ(r->radius, G::THERMAPLUGG_ROOM_RADIUS);
+    EXPECT_FLOAT_EQ(r->pullOutRadius, 0.0f);   // far past the computed exclusion sphere
+    GnPos const t{ G::THERMAPLUGG_X, G::THERMAPLUGG_Y, G::THERMAPLUGG_Z };
+    struct S { GnPos p; float wander; };
+    for (S const& s : { S{ { -590.2f, 681.2f, -327.0f }, 2.0f }, S{ { -589.4f, 686.1f, -327.0f }, 2.0f },
+                        S{ { -592.2f, 675.5f, -327.0f }, 2.0f }, S{ { -588.5f, 691.9f, -327.0f }, 2.0f },
+                        S{ { -592.6f, 684.3f, -327.0f }, 2.0f }, S{ { -593.8f, 679.4f, -327.0f }, 5.0f },
+                        S{ { -591.7f, 689.4f, -327.0f }, 5.0f } })
+    {
+        float const d = GnDist(t, s.p);
+        EXPECT_TRUE(RoomAggroRegistry::IsRoomTrash(*r, 6224, d + s.wander, 28.0f)) << s.p.x;
+        EXPECT_TRUE(RoomAggroRegistry::IsRoomTrash(*r, 6224, d - s.wander, 28.0f)) << s.p.x;
+    }
+    // The next unit out is the Mekgineer Trigger 30138 at 97.3yd.
+    EXPECT_GT(GnDist(t, { -617.4f, 715.5f, -327.0f }), r->radius + 20.0f);
+}
+
+// No other Gnomeregan boss has a room row: Techbot's dish and Electrocutioner's
+// platform hold no trash, the Alert hall's packs are deleted, and Pummeler's
+// pocket is empty.
+TEST(RoomAggroRegistryTest, GnomereganOnlyFalloutAndThermapluggHaveRooms)
+{
+    namespace G = DcGnomeregan;
+    for (uint32 boss : { G::NPC_TECHBOT, G::NPC_ELECTRO, G::NPC_ALERT_SYSTEM, G::NPC_PUMMELER })
+        EXPECT_EQ(RoomAggroRegistry::Find(G::MAP_ID, boss), nullptr) << boss;
+}

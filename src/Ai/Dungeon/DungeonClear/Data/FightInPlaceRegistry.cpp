@@ -124,6 +124,19 @@ namespace
         // holds nothing else to pull. The box is the hall between the Golem
         // doors and the throne door.
         { 230, 1340.0f, 1420.0f, -705.0f, -562.0f },
+        // Gnomeregan (90): Crowd Pummeler's pocket. Another reason: he floats
+        // in the glass window, rooted, 4.8yd under the pocket floor, and his
+        // script refuses any pull whose first attacker stands outside the pocket
+        // box (x -913..-884, y 342..391): he evades at once. A ranged tag from the
+        // corridor or a drag-to-camp can never work on him, so the walk-in engage
+        // takes him from the floor in front of the glass. The box is the pocket
+        // widened to his origin (x -883.57), so his own position is in it.
+        //
+        // KNOWN AND ACCEPTED OVERLAP (XY-only): the lower room 44yd below runs
+        // under the glass (x -889..-830), so its west edge (x -889..-880 here)
+        // falls inside. No route goes there: it is 816yd of walking from the
+        // pocket and off the way to Thermaplugg.
+        { 90, -913.0f, -880.0f, 342.0f, 391.0f },
     };
 }
 

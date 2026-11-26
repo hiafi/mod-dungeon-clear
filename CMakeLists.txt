@@ -15,6 +15,11 @@
 
 AC_ADD_SCRIPT("${CMAKE_CURRENT_LIST_DIR}/src")
 
+# New files added: Data/Events/GnomereganEvents.cpp
+#   (Gnomeregan, map 90 - the rework's clear order, its two Finder sections and
+#    the full clear as run wings, the Workshop Door clicked from the inside on
+#    the full clear's Alert System detour, the room pre-clears.)
+
 # New files added: Util/DcReleaseDecision.h, Util/DcReleaseRecovery.{h,cpp}
 #   (release and walk back - the pure kernel, edge-pinned by t/TestReleaseDecision,
 #    and its engine glue)

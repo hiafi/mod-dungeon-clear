@@ -52,6 +52,24 @@ namespace DcTestDungeonRegistry
             { "sfk",             "Shadowfang Keep",                33,  -229.13f,  2109.18f,   76.89f, 1.267f, 24, "" },
             { "stockade",        "The Stockade",                   34,    54.23f,     0.28f,  -18.34f, 6.260f, 24, "" },
             { "bfd",             "Blackfathom Deeps",              48,  -151.89f,   106.96f,  -39.87f, 4.530f, 24, "" },
+            // Gnomeregan: level 28 against the rework's level-28 bosses (heroic 60, at the
+            // classic cap). Two Finder sections on one connected map (see
+            // GnomereganEvents), each its own row whose token IS the run wing, plus
+            // the whole dungeon, `gnomer`, with the Alert System detour through the
+            // Workshop Door. `gnomer` and section 1 enter at area trigger 324's
+            // landing (Finder 14's start is 2yd above that floor), section 2 at the
+            // Train Depot (area trigger 523, Finder 320). No no-progress override:
+            // every leg is boss to boss through trash, and the 1,198yd walk to
+            // Electrocutioner re-arms the clock yard by yard.
+            { "gnomer",          "Gnomeregan",                     90,  DcGnomeregan::ENTRANCE_X,
+              DcGnomeregan::ENTRANCE_Y, DcGnomeregan::ENTRANCE_Z, DcGnomeregan::ENTRANCE_O, 28, "",
+              /*heroicLevel*/ 60 },
+            { "gnomer-s1",       "Gnomeregan: section 1",          90,  DcGnomeregan::ENTRANCE_X,
+              DcGnomeregan::ENTRANCE_Y, DcGnomeregan::ENTRANCE_Z, DcGnomeregan::ENTRANCE_O, 28, "Section 1",
+              /*heroicLevel*/ 60 },
+            { "gnomer-s2",       "Gnomeregan: The Workshop",       90,  DcGnomeregan::DEPOT_X,
+              DcGnomeregan::DEPOT_Y, DcGnomeregan::DEPOT_Z, DcGnomeregan::DEPOT_O, 28, "The Workshop",
+              /*heroicLevel*/ 60 },
             { "rfk",             "Razorfen Kraul",                 47,  1943.00f,  1544.63f,   82.00f, 1.380f, 30, "" },
             // Scarlet Monastery is four Finder sections on one map (see
             // ScarletMonasteryEvents); each row enters at its section's start
@@ -61,7 +79,6 @@ namespace DcTestDungeonRegistry
             // Library 34-35, Armory 37, Cathedral 40).
             { "sm-gy",           "Scarlet Monastery: Graveyard",  189,  1688.99f,  1053.48f,   18.68f, 0.001f, 32,
               "Graveyard" },
-            { "gnomer",          "Gnomeregan",                     90,  -332.22f,    -2.28f, -150.86f, 2.770f, 32, "" },
             { "sm-lib",          "Scarlet Monastery: Library",    189,   255.35f,  -209.09f,   18.68f, 6.267f, 35, "Library" },
             { "sm-arm",          "Scarlet Monastery: Armory",     189,  1610.83f,  -323.43f,   18.67f, 6.280f, 37,
               "Armory" },
