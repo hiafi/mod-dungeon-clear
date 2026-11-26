@@ -224,6 +224,15 @@ namespace DcTestDungeonRegistry
               "kara", { BossRosterRegistry::ObjectiveEntry(DcKarazhan::OBJ_CHESS) },
               InstanceDataEquals(DcKarazhan::DATA_CHESS_EVENT, DcKarazhan::CHESS_EVENT_DONE),
               60, 1800, 300 },
+
+            // Zul'Farrak: the pool (HANDOFF section 3.12, the bar's second run). The
+            // `zf` run is complete at Ukorz: the pool objective is optional by design
+            // and starts skipped. This scenario focuses it (the focus opt-in takes it
+            // off the skipped set), from the entrance: Velratha, then Gahz'rilla, and
+            // the run passes on DC's all-cleared once his slot reads DONE. No
+            // predicate, no overrides.
+            { "zf-pool",         "Zul'Farrak: the pool",          209,  1213.52f,   841.59f,    8.93f, 6.090f, 46,
+              "", 0, "zf", { BossRosterRegistry::ObjectiveEntry(DcZulFarrak::OBJ_POOL) } },
         };
         return rows;
     }

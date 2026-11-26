@@ -44,9 +44,15 @@
 //                            betrayal; the Test is a human's choice), the four
 //                            fight, then the End Door (Weegli's barrel).
 //   8. Chief Ukorz           a plain pull of the pair; the mesa's guards first.
-//   9. Hydromancer Velratha  a plain pull (no gong: she strikes it at 30%).
-//  10. The pool              objective + event 2: Gahz'rilla once he is ashore.
-//                            Optional: the bar is the clear through Ukorz.
+//                            The run is complete here (HANDOFF section 3.12:
+//                            "then the pool not required").
+//   9. The pool              an OPTIONAL-BY-DESIGN objective + event 2:
+//                            Velratha (no gong: she strikes it at 30%), then
+//                            Gahz'rilla once he is ashore. It starts in the
+//                            skipped set (DcTargeting::SeedOptionalSkips), so a
+//                            run ends at Ukorz with no `dc skip`; `dc boss pool`
+//                            or the zf-pool test scenario runs it as an add-on.
+//                            Velratha is off the roster: the pool is her anchor.
 //
 // What the clear must NOT do here:
 //   * click a Troll Cage before the Executioner is dead (rule 30): the UseGO is
@@ -264,15 +270,18 @@ void RegisterZulFarrakEvents(std::vector<DungeonEvent>& out)
                       .Build());
 
     // --- 2. The pool: Velratha, then Gahz'rilla (optional) -----------------
-    // Velratha is a roster boss and is pulled like any other (she no longer
-    // patrols). At 30% she runs to the gong and strikes it; the instance summons
+    // The pool objective's event, run only when the pool is opted in (it starts
+    // skipped). Velratha is pulled first, like any boss (she no longer patrols;
+    // the roster patch drops her row, so this is her only anchor). At 30% she
+    // runs to the gong and strikes it; the instance summons
     // Gahz'rilla, who cannot be selected until he is ashore at (1677, 1167), 15s
-    // at most. This objective, last in the order and anchored on the gong,
+    // at most. This objective, last in the order and anchored on the gong's bank,
     // finishes him: Velratha first if a pool wipe brought her back, then wait
     // until he can be attacked, kill him, and hold until slot 1 reads DONE. A pool
     // wipe (slot 1 back to NOT_STARTED; he despawns, she is respawned) rewinds to
     // her pull. Never UseGO the gong. OPTIONAL: the bar is the clear through Ukorz
     // (section 7 #57 A), so a failure here skips instead of stalling the run.
+    // DC-1 queue / HANDOFF section 3.12 "the pool not required".
     out.push_back(EventBuilder(Z::MAP_ID, Z::EVENT_POOL, "The pool (Velratha and Gahz'rilla)")
                       .Anchored(Z::ORDER_POOL)
                       .Persistent()
@@ -282,7 +291,7 @@ void RegisterZulFarrakEvents(std::vector<DungeonEvent>& out)
                           .Timeout(120000)
                       .KillCreatureEngage(Z::NPC_GAHZRILLA, /*count*/ 1, /*searchRadius*/ 120.0f)
                           .EngageOnlyWhenActive()
-                      .MoveToHoldUntilBossState(Z::GONG_X, Z::GONG_Y, Z::GONG_Z, Z::POOL_HOLD_RADIUS,
+                      .MoveToHoldUntilBossState(Z::POOL_BANK_X, Z::POOL_BANK_Y, Z::POOL_BANK_Z, Z::POOL_HOLD_RADIUS,
                                                 Z::SLOT_GAHZRILLA, DcBossStateBit(Z::STATE_DONE))
                           .RestartOnBossState(DcBossStateBit(Z::STATE_NOT_STARTED) |
                                               DcBossStateBit(Z::STATE_FAIL))
@@ -331,10 +340,11 @@ void RegisterZulFarrakEvents(std::vector<DungeonEvent>& out)
                       .Build());
 
     // --- 7. The Altar: Nekrum and Sezz'ziz ---------------------------------
-    // Stage 3 summons both idle at the altar 5s after the Stair is won; their pull
-    // starts it (DATA_PYRAMID_START 3), their deaths win the Pyramid (stage 4,
-    // slot 5 DONE). The hold rewinds the event when a stage 3 wipe has put them
-    // back idle. PERSISTENT: two kills with gaps.
+    // Both (and wave 3) stand idle at the altar from the moment the Stair is won
+    // (stage 3); the stage starts 5s later or at their first pull, whichever
+    // comes first (DATA_PYRAMID_START 3), and their deaths win the Pyramid (stage
+    // 4, slot 5 DONE). The hold rewinds the event when a stage 3 wipe has put
+    // them back idle. PERSISTENT: two kills with gaps.
     out.push_back(EventBuilder(Z::MAP_ID, Z::EVENT_ALTAR, "The Altar (Nekrum and Sezz'ziz)")
                       .Anchored(Z::ORDER_ALTAR)
                       .Persistent()
@@ -387,8 +397,10 @@ void RegisterZulFarrakRoster(std::vector<BossRosterPatch>& t)
     using namespace DcRoster;
 
     // ORDER. The DBC bits (Velratha 0, Antu'sul 2, Theka 3, Zum'rah 4, Ukorz 7)
-    // would send the run to the far pool first. The five auto-derived bosses keep
-    // their bits and take the ruled order's keys. The Pyramid (bit 5) and the
+    // would send the run to the far pool first. Four auto-derived bosses keep
+    // their bits and take the ruled order's keys; Velratha is removed and folded
+    // into the pool objective (her pull is its event's first step), which is
+    // OPTIONAL BY DESIGN: the clear's bar ends at Ukorz. The Pyramid (bit 5) and the
     // crew (bit 6) carry cast-spell credits in the rework (213840 / 213841), so
     // BossSpawnIndex never lists them and they are objectives here; Gahz'rilla
     // (bit 1, summoned) is the pool objective's.
@@ -424,12 +436,15 @@ void RegisterZulFarrakRoster(std::vector<BossRosterPatch>& t)
     crew.doneInstanceDataId = static_cast<int32>(Z::DATA_END_DOOR);
     crew.doneInstanceDataValue = Z::END_DOOR_BLOWN;
 
-    // The pool, last: on the gong, where Velratha fights on after 30%.
+    // The pool, last and optional: on the gong's bank, where Velratha fights on
+    // after 30%. Skipped by default, so the run is complete at Ukorz.
     DungeonBossInfo pool = MakeObjective(OBJ(Z::OBJ_POOL), /*encounterIndex*/ Z::SLOT_GAHZRILLA, Z::MAP_ID,
-                                         "The pool (Gahz'rilla)", Z::GONG_X, Z::GONG_Y, Z::GONG_Z,
+                                         "The pool (Velratha and Gahz'rilla)", Z::POOL_BANK_X, Z::POOL_BANK_Y,
+                                         Z::POOL_BANK_Z,
                                          Z::POOL_ARRIVE_RADIUS, /*gateEntry*/ 0, /*hook*/ 0, Z::EVENT_POOL,
                                          Z::ORDER_POOL);
     pool.doneBossStateIndex = static_cast<int32>(Z::SLOT_GAHZRILLA);
+    pool.optionalByDesign = true;
 
     BossRosterPatch p;
     p.mapId = Z::MAP_ID;
@@ -438,8 +453,8 @@ void RegisterZulFarrakRoster(std::vector<BossRosterPatch>& t)
         { Z::NPC_ANTUSUL, Z::ORDER_ANTUSUL },
         { Z::NPC_ZUMRAH, Z::ORDER_ZUMRAH },
         { Z::NPC_UKORZ, Z::ORDER_UKORZ },
-        { Z::NPC_VELRATHA, Z::ORDER_VELRATHA },
     };
+    p.remove = { Z::NPC_VELRATHA };
     p.add = { plaza, pyramid, altar, crew, pool };
     t.push_back(std::move(p));
 }

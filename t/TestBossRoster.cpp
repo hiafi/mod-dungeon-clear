@@ -106,10 +106,11 @@ TEST(BossRosterRegistryTest, UldamanAltarObjectivesSortBeforeArchaedas)
 }
 
 // Zul'Farrak, the rework: the ruled order is Theka -> Antu'sul -> Zum'rah -> the
-// plaza -> the Pyramid -> the Altar -> the crew -> Ukorz -> Velratha -> the pool.
-// The DBC bits (Velratha 0, Antu'sul 2, Theka 3, Zum'rah 4, Ukorz 7) do not match
-// the path; the reorder stamps the ruled keys on the five real bosses (kill-bits
-// untouched) and the five objectives slot in between.
+// plaza -> the Pyramid -> the Altar -> the crew -> Ukorz, then the pool. The DBC
+// bits (Velratha 0, Antu'sul 2, Theka 3, Zum'rah 4, Ukorz 7) do not match the
+// path; the reorder stamps the ruled keys on four real bosses (kill-bits
+// untouched), Velratha is folded into the pool objective (her pull is its
+// event's first step) and the five objectives slot in between.
 TEST(BossRosterRegistryTest, ZfFullClearOrder)
 {
     namespace Z = DcZulFarrak;
@@ -122,7 +123,8 @@ TEST(BossRosterRegistryTest, ZfFullClearOrder)
         Boss(7267, 7, "Chief Ukorz Sandscalp", 209),
     };
     std::vector<DungeonBossInfo> out = BossRosterRegistry::Apply(209, DcDiffKey::Dungeon(DUNGEON_DIFFICULTY_NORMAL), base);
-    ASSERT_EQ(out.size(), 10u);
+    ASSERT_EQ(out.size(), 9u);
+    EXPECT_EQ(Find(out, 7795), nullptr);  // Velratha: the pool objective is her anchor
 
     auto pos = [&](uint32 entry)
     {
@@ -150,15 +152,43 @@ TEST(BossRosterRegistryTest, ZfFullClearOrder)
     ASSERT_GE(pool, 0);
 
     std::vector<int> const order = { pos(7272), pos(8127), pos(7271), plaza, pyramid, altar,
-                                     crew,      pos(7267), pos(7795), pool };
+                                     crew,      pos(7267), pool };
     for (std::size_t i = 0; i + 1 < order.size(); ++i)
         EXPECT_LT(order[i], order[i + 1]) << "step " << i;
 
     // Reordering must NOT disturb the real DBC kill-bits.
-    EXPECT_EQ(Find(out, 7795)->encounterIndex, 0u);  // Velratha
     EXPECT_EQ(Find(out, 7267)->encounterIndex, 7u);  // Ukorz
     EXPECT_EQ(BossOrderKey(*Find(out, 7267)), 8u);
-    EXPECT_EQ(BossOrderKey(*Find(out, 7795)), 9u);
+    EXPECT_EQ(BossOrderKey(out[pool]), 9u);
+}
+
+// HANDOFF section 3.12, "then the pool not required": a run is complete at Ukorz
+// with no `dc skip`. The pool objective is the map's only optional-by-design
+// anchor (seeded into the skipped set at `dc on` and at a new instance); every
+// other anchor is part of the bar. A map without one seeds nothing.
+TEST(BossRosterRegistryTest, ZfPoolIsOptionalByDesign)
+{
+    namespace Z = DcZulFarrak;
+    std::vector<DungeonBossInfo> base = {
+        Boss(7795, 0, "Hydromancer Velratha", 209),
+        Boss(7267, 7, "Chief Ukorz Sandscalp", 209),
+    };
+    std::vector<DungeonBossInfo> out =
+        BossRosterRegistry::Apply(209, DcDiffKey::Dungeon(DUNGEON_DIFFICULTY_NORMAL), base);
+    int optional = 0;
+    for (DungeonBossInfo const& b : out)
+    {
+        bool const isPool = b.kind == DungeonAnchorKind::Objective && b.eventId == Z::EVENT_POOL;
+        EXPECT_EQ(b.optionalByDesign, isPool) << b.name;
+        EXPECT_FALSE(b.skipByDesign) << b.name;  // runnable: `dc boss pool` or the zf-pool scenario
+        optional += b.optionalByDesign ? 1 : 0;
+    }
+    EXPECT_EQ(optional, 1);
+    std::vector<uint32> const seeded = BossRosterRegistry::OptionalEntries(209);
+    ASSERT_EQ(seeded.size(), 1u);
+    EXPECT_EQ(seeded[0], BossRosterRegistry::ObjectiveEntry(Z::OBJ_POOL));
+    EXPECT_TRUE(BossRosterRegistry::OptionalEntries(36).empty());   // Deadmines
+    EXPECT_TRUE(BossRosterRegistry::OptionalEntries(389).empty());  // Ragefire Chasm
 }
 
 // Each objective names what finishes it in the instance, so a reloaded or
@@ -191,7 +221,9 @@ TEST(BossRosterRegistryTest, ZfObjectivesFinishOnTheInstanceState)
         else if (o.eventId == Z::EVENT_POOL)
         {
             EXPECT_EQ(o.doneBossStateIndex, 1);
-            EXPECT_NEAR(o.x, 1650.91f, 0.01f);  // on the gong
+            EXPECT_NEAR(o.x, 1645.0f, 0.01f);   // the gong's bank, Velratha's fight spot (F-1d)
+            EXPECT_NEAR(o.y, 1165.5f, 0.01f);
+            EXPECT_TRUE(o.optionalByDesign);
         }
         else
         {

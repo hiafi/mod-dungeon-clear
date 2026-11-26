@@ -11,6 +11,8 @@
 #include <vector>
 
 #include "Ai/Dungeon/DungeonClear/Data/DungeonWingRegistry.h"
+#include "Ai/Dungeon/DungeonClear/Data/Events/DungeonEventTables.h"
+#include "Ai/Dungeon/DungeonClear/Overrides/BossRosterRegistry.h"
 #include "TestRun/DcTestDungeonRegistry.h"
 
 using DcTestDungeonRegistry::All;
@@ -53,7 +55,9 @@ TEST(DcTestDungeonRegistryTest, HeroicLevelMatchesTheExpansionCap)
         {574, 575, 576, 578, 595, 599, 600, 601, 602, 604, 608, 619, 632, 650, 658, 668};
     for (Row const& row : All())
     {
-        if (tbcMaps.count(row.mapId))
+        if (DcTestDungeonRegistry::IsScenario(row))
+            EXPECT_EQ(row.heroicLevel, 0u) << row.token;   // a scenario inherits no heroic mode (zf-pool)
+        else if (tbcMaps.count(row.mapId))
             EXPECT_EQ(row.heroicLevel, 70u) << row.token;
         else if (wotlkMaps.count(row.mapId))
             EXPECT_EQ(row.heroicLevel, 80u) << row.token;
@@ -108,6 +112,25 @@ TEST(DcTestDungeonRegistryTest, ZulFarrakRunsAtFortySixAndHeroicAtSixty)
     EXPECT_EQ(row->overallTimeoutS, 0u);
     EXPECT_EQ(Find("209"), row);
     EXPECT_EQ(DungeonWingRegistry::Get(209), nullptr);
+}
+
+// The pool is the bar's second run (HANDOFF section 3.12): a scenario of `zf`
+// from the same entrance whose only focus is the optional pool objective. The
+// numeric lookup still means the whole dungeon.
+TEST(DcTestDungeonRegistryTest, ZulFarrakPoolIsAScenarioOfZf)
+{
+    Row const* row = Find("zf-pool");
+    ASSERT_NE(row, nullptr);
+    EXPECT_TRUE(DcTestDungeonRegistry::IsScenario(*row));
+    EXPECT_STREQ(row->scenarioOf, "zf");
+    EXPECT_EQ(row->mapId, 209u);
+    EXPECT_EQ(row->recommendedLevel, 46u);
+    ASSERT_EQ(row->focusEntries.size(), 1u);
+    EXPECT_EQ(row->focusEntries[0], BossRosterRegistry::ObjectiveEntry(DcZulFarrak::OBJ_POOL));
+    EXPECT_FALSE(row->success.IsSet());
+    EXPECT_NEAR(row->x, 1213.52f, 0.01f);
+    EXPECT_EQ(DcTestDungeonRegistry::ValidateScenario(*row, DcTestDungeonRegistry::All()), "");
+    EXPECT_STREQ(Find("209")->token, "zf");
 }
 
 TEST(DcTestDungeonRegistryTest, FindByNumericMapId)

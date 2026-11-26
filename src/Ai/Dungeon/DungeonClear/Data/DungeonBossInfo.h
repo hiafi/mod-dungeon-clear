@@ -121,6 +121,17 @@ struct DungeonBossInfo
     // every run of the map. Stamped by a BossRosterPatch::skipByDesign entry.
     bool skipByDesign{false};
 
+    // OPTIONAL by design: on the roster and runnable, but not part of the
+    // clear's bar. Every run starts with it in the skipped set (the set a
+    // `dc skip` builds), seeded at `dc on` and at a new instance
+    // (DcTargeting::SeedOptionalSkips), so the clear completes without it;
+    // `dc boss <name>` or a test scenario that focuses it takes it back off the
+    // set, and the clear then runs it like any other anchor. Unlike
+    // skipByDesign (never selected), an optional anchor is always runnable: an
+    // add-on to the run, e.g. Zul'Farrak's pool after Ukorz. Set on an added
+    // anchor (BossRosterPatch::add); BossRosterRegistry::OptionalEntries lists them.
+    bool optionalByDesign{false};
+
     // EVERY spawn point of this entry on the map, in creature_data order, when
     // there is more than one — x/y/z above hold the first. BossSpawnIndex dedups
     // the derived roster by entry (one anchor per boss), and for most bosses that

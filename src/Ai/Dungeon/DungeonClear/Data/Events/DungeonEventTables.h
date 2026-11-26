@@ -237,7 +237,7 @@ namespace DcZulFarrak
 
     // Events.
     constexpr uint32 EVENT_PYRAMID      = 1;  // the Executioner, a cage, the Stair held on the landing
-    constexpr uint32 EVENT_POOL         = 2;  // Velratha, then Gahz'rilla (optional)
+    constexpr uint32 EVENT_POOL         = 2;  // Velratha, then Gahz'rilla (an optional anchor)
     constexpr uint32 EVENT_WAKE_ZUMRAH  = 3;  // stock wake (hook 5), now after his room
     constexpr uint32 EVENT_ROOM_AGGRO   = 4;  // the room pre-clears (RoomAggroRegistry rows)
     constexpr uint32 EVENT_WAKE_ANTUSUL = 5;  // the chamber cleared, then his wake
@@ -253,7 +253,10 @@ namespace DcZulFarrak
     constexpr uint32 OBJ_CREW    = 5;
 
     // Clear order (HANDOFF section 3.12): Theka, Antu'sul, Zum'rah, the Pyramid
-    // (plaza, top, Altar), the crew, Ukorz, then the pool.
+    // (plaza, top, Altar), the crew, Ukorz; the run is complete there ("the pool
+    // not required"). The pool (Velratha and Gahz'rilla) follows as an
+    // optional-by-design anchor: skipped by default, run by `dc boss pool` or
+    // the zf-pool test scenario.
     constexpr int32 ORDER_THEKA    = 1;
     constexpr int32 ORDER_ANTUSUL  = 2;
     constexpr int32 ORDER_ZUMRAH   = 3;
@@ -262,8 +265,7 @@ namespace DcZulFarrak
     constexpr int32 ORDER_ALTAR    = 6;
     constexpr int32 ORDER_CREW     = 7;
     constexpr int32 ORDER_UKORZ    = 8;
-    constexpr int32 ORDER_VELRATHA = 9;
-    constexpr int32 ORDER_POOL     = 10;
+    constexpr int32 ORDER_POOL     = 9;
 
     // Hook ids (ObjectiveHookRegistry: one flat space). 5 is the stock WakeZumrah.
     constexpr uint32 HOOK_WAKE_ZUMRAH  = 5;
@@ -344,11 +346,13 @@ namespace DcZulFarrak
     // south of the chamber): the throat only, so the pull still works the chamber.
     constexpr float ANTUSUL_SUMMON_HOLD_RADIUS = 30.0f;
 
-    // The pool: the objective sits on the gong (Velratha runs there at 30% and
-    // fights on); Gahz'rilla comes ashore at (1677, 1167), 26yd east.
-    constexpr float GONG_X = 1650.91f;
-    constexpr float GONG_Y = 1171.88f;
-    constexpr float GONG_Z = 10.901f;
+    // The pool: the objective sits on the gong's bank, where Velratha strikes
+    // the gong at 30% and fights on (F-1d DQ-2 A: 8.4yd from the gong, 4yd past
+    // the pool strip's end, out of the water; the gong itself, (1650.91,
+    // 1171.88), stands over the strip). Gahz'rilla comes ashore at (1677, 1167).
+    constexpr float POOL_BANK_X = 1645.0f;
+    constexpr float POOL_BANK_Y = 1165.5f;
+    constexpr float POOL_BANK_Z = 9.3f;
     constexpr float POOL_ARRIVE_RADIUS = 12.0f;
     constexpr float POOL_HOLD_RADIUS = 40.0f;
 
@@ -379,10 +383,13 @@ namespace DcZulFarrak
         Restart,
     };
 
-    // The Altar's front step. Nekrum and Sezz'ziz come into the world idle 5s
-    // after the Stair is won (DATA_PYRAMID_STAGE reads 3 at once), and a kill
-    // step run before they exist reads "none alive" and completes on nothing.
-    // Wait for either of them, or for the stage to be won already.
+    // The Altar's front step. Nekrum and Sezz'ziz (and wave 3) come into the
+    // world idle, immune to NPCs, the moment the Stair is won (DATA_PYRAMID_STAGE
+    // reads 3 at once, STAGE-D4b s5); the stage itself starts 5s later or at
+    // their first pull, whichever comes first, so the gate passes at once either
+    // way. Kept for a reload or a slow spawn: a kill step run before they exist
+    // reads "none alive" and completes on nothing. Wait for either of them, or
+    // for the stage to be won already.
     constexpr Gate AltarReady(uint32 stage, bool altarBossAlive)
     {
         if (stage >= STAGE_WON || altarBossAlive)

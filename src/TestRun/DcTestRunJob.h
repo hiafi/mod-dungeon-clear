@@ -303,6 +303,8 @@ private:
     // Skipped on a run-instance change (DcTargeting::
     // ResetCompletionLatchesForNewInstance), and a fill that lapsed would send
     // the raid off to clear the whole map. No-op on a full-dungeon run.
+    // It also takes the focus back off the set once per run instance (the stamp
+    // below): an optional-by-design focus starts skipped (SeedOptionalSkips).
     void ApplyScenarioSkips(Player* tank, AiObjectContext* ctx);
     // Copy the event-published extras (DcRunState::testExtras on the tank) and the
     // release log into the record. Called every monitor tick and once more at Finish, so a
@@ -435,6 +437,7 @@ private:
     uint32 _runItemId = 0;
     void GrantRunItem(Player* tank);
     std::vector<uint32> _focus;             // roster entries the run is scoped to
+    uint32 _focusOptInInstance = 0;         // run instance the focus was last taken off Skipped in
     DcTestDungeonRegistry::SuccessPredicate _success;
     uint32 _successGraceMs = 0;
     // The predicate's latch + grace clock (pure — DcTestRunVerdict.h).

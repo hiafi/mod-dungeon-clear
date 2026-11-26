@@ -253,6 +253,12 @@ public:
     // while DC is off) — so whichever fires first clears the latch.
     static bool ResetCompletionLatchesForNewInstance(Player* bot, AiObjectContext* context);
 
+    // Put the map's optional-by-design anchors (DungeonBossInfo::optionalByDesign)
+    // into the skipped set, so the clear completes without them until a `dc boss`
+    // or a scenario focus takes one back off. Called wherever the skipped set is
+    // emptied for a fresh run: the new-instance reset above and `dc on`.
+    static void SeedOptionalSkips(Player* bot, AiObjectContext* context);
+
     // --- Pull-back bosses (BossPullbackRegistry) --------------------------
 
     // True when the next anchor is a PULL-BACK boss, the tank has arrived at its
