@@ -53,7 +53,7 @@ TEST(DcTestGearTiersTest, EveryRegistryRowIsClassified)
             // Classic heroics are the reworks' own; each is a decision.
             if (exp == Expansion::Classic)
             {
-                EXPECT_EQ(row.mapId, 389u) << row.token;  // Ragefire Chasm
+                EXPECT_TRUE(row.mapId == 389u || row.mapId == 209u) << row.token;  // Ragefire Chasm, Zul'Farrak
             }
         }
         EXPECT_LE(row.recommendedLevel, cap) << row.token;
@@ -123,6 +123,11 @@ TEST(DcTestGearTiersTest, EndgameLadderIsTheDocumentedTiers)
     EXPECT_TRUE(HasIlvl(rfcHeroic, 65));  // pre-raid dungeon gear
     EXPECT_TRUE(HasIlvl(rfcHeroic, 92));
     EXPECT_FALSE(HasIlvl(rfcHeroic, 120));
+
+    std::vector<Choice> const zfHeroic = Ladder(209, 60);  // Zul'Farrak heroic
+    EXPECT_TRUE(HasIlvl(zfHeroic, 65));
+    EXPECT_TRUE(HasIlvl(zfHeroic, 92));
+    EXPECT_FALSE(HasIlvl(zfHeroic, 120));
 
     std::vector<Choice> const wotlk = Ladder(668, 80);  // Halls of Reflection
     EXPECT_TRUE(HasIlvl(wotlk, 200));

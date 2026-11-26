@@ -388,6 +388,7 @@ bool DcOnAction::Execute(Event event)
     ApplyPullSetting(bot, context, AI_VALUE(uint32, DcKey::PullSetting));
     DcRun::Of(context).selectedBossEntry = 0u;
     context->GetValue<std::unordered_set<uint32>&>(DcKey::Skipped)->Get().clear();
+    DcTargeting::SeedOptionalSkips(bot, context);   // optional-by-design anchors start skipped
     context->GetValue<std::unordered_set<uint32>&>(DcKey::ClearedAnchors)->Get().clear();
     context->GetValue<std::unordered_set<uint32>&>(DcKey::SeenBosses)->Get().clear();
     context->GetValue<std::unordered_set<uint32>&>(DcKey::SeenDueEvents)->Get().clear();

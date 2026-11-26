@@ -68,7 +68,12 @@ namespace DcTestDungeonRegistry
             { "sm-cath",         "Scarlet Monastery: Cathedral",  189,   855.68f,  1321.50f,   18.67f, 0.002f, 40, "Cathedral" },
             { "rfd",             "Razorfen Downs",                129,  2592.55f,  1107.50f,   51.29f, 4.740f, 40, "" },
             { "uldaman",         "Uldaman",                        70,  -226.80f,    49.09f,  -46.03f, 1.390f, 44, "" },
-            { "zf",              "Zul'Farrak",                    209,  1213.52f,   841.59f,    8.93f, 6.090f, 46, "" },
+            // Zul'Farrak: level 46 against the rework's level 44-46 bosses; heroic (the
+            // rework's own, level-60 bosses) at the classic cap. No no-progress
+            // override: the Pyramid's waves and the crew re-arm the clock fight by
+            // fight, and the global 600s covers the 2,373yd of route.
+            { "zf",              "Zul'Farrak",                    209,  1213.52f,   841.59f,    8.93f, 6.090f, 46,
+              "", /*heroicLevel*/ 60 },
             // Maraudon: the whole dungeon, then its three dungeon-finder wings at
             // their lfg_dungeon_template entrances (see MaraudonEvents). The row's
             // token IS the run wing; `maraudon` clears all of it.
@@ -219,6 +224,15 @@ namespace DcTestDungeonRegistry
               "kara", { BossRosterRegistry::ObjectiveEntry(DcKarazhan::OBJ_CHESS) },
               InstanceDataEquals(DcKarazhan::DATA_CHESS_EVENT, DcKarazhan::CHESS_EVENT_DONE),
               60, 1800, 300 },
+
+            // Zul'Farrak: the pool (HANDOFF section 3.12, the bar's second run). The
+            // `zf` run is complete at Ukorz: the pool objective is optional by design
+            // and starts skipped. This scenario focuses it (the focus opt-in takes it
+            // off the skipped set), from the entrance: Velratha, then Gahz'rilla, and
+            // the run passes on DC's all-cleared once his slot reads DONE. No
+            // predicate, no overrides.
+            { "zf-pool",         "Zul'Farrak: the pool",          209,  1213.52f,   841.59f,    8.93f, 6.090f, 46,
+              "", 0, "zf", { BossRosterRegistry::ObjectiveEntry(DcZulFarrak::OBJ_POOL) } },
         };
         return rows;
     }

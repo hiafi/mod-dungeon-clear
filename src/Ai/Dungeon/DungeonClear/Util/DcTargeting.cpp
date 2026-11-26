@@ -9,6 +9,7 @@
 #include "DungeonClearUtil.h"   // DcEngageGeometry:: cross-unit calls + DC_PULL_* macros
 
 #include "DcDoorIndex.h"
+#include "Ai/Dungeon/DungeonClear/Overrides/BossRosterRegistry.h"
 #include "DungeonClearMath.h"
 #include "DungeonClearTuning.h"
 #include "Ai/Dungeon/DungeonClear/Settings/DcSettings.h"
@@ -1242,12 +1243,28 @@ bool DcTargeting::ResetCompletionLatchesForNewInstance(Player* bot, AiObjectCont
 
     clearedSet.clear();
     skippedSet.clear();
+    SeedOptionalSkips(bot, context);
     context->GetValue<std::unordered_set<uint32>&>(DcKey::SeenBosses)->Get().clear();
     context->GetValue<std::unordered_set<uint32>&>(DcKey::SeenDueEvents)->Get().clear();
     context->GetValue<uint32>(DcKey::StickyBoss)->Set(0u);
     DcRun::Of(context).selectedBossEntry = 0u;
     context->GetValue<uint32>(DcKey::RunInstance)->Set(instanceId);
     return true;
+}
+
+void DcTargeting::SeedOptionalSkips(Player* bot, AiObjectContext* context)
+{
+    if (!bot || !context)
+        return;
+    std::vector<uint32> const optional = BossRosterRegistry::OptionalEntries(bot->GetMapId());
+    if (optional.empty())
+        return;
+    auto& skippedSet = context->GetValue<std::unordered_set<uint32>&>(DcKey::Skipped)->Get();
+    for (uint32 const entry : optional)
+        skippedSet.insert(entry);
+    LOG_INFO("playerbots.dungeonclear",
+             "[DC:{}] map {}: {} optional anchor(s) skipped by default (`dc boss <name>` runs one)",
+             bot->GetName(), bot->GetMapId(), static_cast<uint32>(optional.size()));
 }
 bool DcTargeting::IsRoomClearActive(Player* bot, AiObjectContext* ctx)
 {

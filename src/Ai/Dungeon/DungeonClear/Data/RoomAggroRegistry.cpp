@@ -106,6 +106,24 @@ namespace
           /*hasYBand*/ true, DcRagefireChasm::PLATEAU_ROOM_MIN_Y, DcRagefireChasm::PLATEAU_ROOM_MAX_Y,
           DcRagefireChasm::PLATEAU_ROOM_PULLOUT },
 
+        // Zul'Farrak (209), the rework. Not script radii: no boss calls or
+        // answers assistance; the rows clear Theka's escorts, Zum'rah's bowl
+        // patrols and Ukorz's mesa guards before each pull (HANDOFF section 3.12).
+        // Antu'sul's chamber and the plaza are point clears in the events instead
+        // (the room is not round the boss). The numbers are DcZulFarrak::*_ROOM_*.
+        //   Theka: pull-out 2.5yd, under his nearest escort's path (3yd), so all
+        //     three are dragged out (the advanced pull it forces).
+        //   Zum'rah: no pull-out; the nearest patrol point is 32.4yd out, past
+        //     the computed exclusion sphere. He is friendly until his wake, which
+        //     waits for this room (ZulFarrakEvents.cpp).
+        //   Ukorz: pull-out 20yd keeps Ruuzlu (3.6yd) with him and drags the
+        //     Guardians (35.4yd and out) and the Abominations.
+        { DcZulFarrak::MAP_ID, DcZulFarrak::NPC_THEKA, DcZulFarrak::THEKA_ROOM_RADIUS, {}, false, 0.0f, 0.0f,
+          DcZulFarrak::THEKA_ROOM_PULLOUT },
+        { DcZulFarrak::MAP_ID, DcZulFarrak::NPC_ZUMRAH, DcZulFarrak::ZUMRAH_ROOM_RADIUS, {} },
+        { DcZulFarrak::MAP_ID, DcZulFarrak::NPC_UKORZ, DcZulFarrak::UKORZ_ROOM_RADIUS, {}, false, 0.0f, 0.0f,
+          DcZulFarrak::UKORZ_ROOM_PULLOUT },
+
         // Scholomance (289) has no row: the Marduk / Vectus students are
         // unattackable props now, so there is no room to clear (see
         // ScholomanceEvents.cpp).

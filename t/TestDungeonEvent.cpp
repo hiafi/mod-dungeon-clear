@@ -319,8 +319,8 @@ TEST(DungeonEventAdvance, FailedRequiredStallsOptionalSkips)
 TEST(DungeonEventRegistryTest, FindAndHasEvents)
 {
     EXPECT_NE(DungeonEventRegistry::Find(109, 1), nullptr);  // Sunken Temple forcefield
-    EXPECT_NE(DungeonEventRegistry::Find(209, 1), nullptr);  // ZulFarrak summit
-    EXPECT_NE(DungeonEventRegistry::Find(209, 2), nullptr);  // ZulFarrak Gahz'rilla
+    EXPECT_NE(DungeonEventRegistry::Find(209, 1), nullptr);  // ZulFarrak Pyramid
+    EXPECT_NE(DungeonEventRegistry::Find(209, 2), nullptr);  // ZulFarrak pool
     EXPECT_NE(DungeonEventRegistry::Find(230, 1), nullptr);  // BRD Ring of Law
     EXPECT_NE(DungeonEventRegistry::Find(109, 11), nullptr);  // ST Atal'alarion
     EXPECT_EQ(DungeonEventRegistry::Find(109, 99), nullptr);  // no such event
@@ -472,90 +472,239 @@ TEST(DungeonEventBuilderTest, ClearRadiusStep)
     EXPECT_TRUE(e.steps[0].engage);
 }
 
-// ZulFarrak temple (Executioner / Bly's Band) event: a PERSISTENT anchored step
-// list that runs the whole pyramid set-piece — kill the executioner, crack a cage
-// (UseGO), survive the waves (wait for Sezz'ziz), descend to kill the temple
-// bosses (engage steps), gossip Weegli (door) then Bly (fight), and kill Bly.
-TEST(DungeonEventRegistryTest, ZulFarrakTempleEventShape)
+// --- Zul'Farrak (209), the rework (ZulFarrakEvents.cpp) --------------------
+
+// The Pyramid (event 1, the top): pull the Executioner, open a cage only after
+// he is dead, then hold the LANDING until the instance's stage data reads the
+// Altar. The old ramp hold (1886, 1250, 30) is inside the barrel lane, and the
+// stock phase gate (DATA_PYRAMID 7) is gone.
+TEST(DungeonEventRegistryTest, ZulFarrakPyramidEventShape)
 {
-    DungeonEvent const* e = DungeonEventRegistry::Find(209, 1);
-    ASSERT_NE(e, nullptr);
-    EXPECT_EQ(e->activation, EventActivation::Anchored);
-    EXPECT_TRUE(e->persistent);
-    EXPECT_TRUE(e->required);
-
-    ASSERT_EQ(e->steps.size(), 9u);
-
-    // 1. kill the executioner (engage-driven), then crack a cage to start it.
-    EXPECT_EQ(e->steps[0].kind, EventStepKind::KillCreature);
-    EXPECT_EQ(e->steps[0].creatureEntry, 7274u);
-    EXPECT_TRUE(e->steps[0].engage);
-    EXPECT_EQ(e->steps[1].kind, EventStepKind::UseGameObject);
-    EXPECT_EQ(e->steps[1].goEntry, 141073u);
-
-    // 2. GARRISON the ramp head (MoveTo with a monotonic instance-phase gate):
-    //    hold there — re-moving if combat displaced the tank — until DATA_PYRAMID
-    //    (0) reaches WAVE_3 (7).
-    EXPECT_EQ(e->steps[2].kind, EventStepKind::MoveTo);
-    EXPECT_EQ(e->steps[2].instanceDataId, 0);   // DATA_PYRAMID
-    EXPECT_EQ(e->steps[2].instanceDataMin, 7u);  // PYRAMID_WAVE_3
-
-    // 3. descend and kill the two temple bosses (engage-driven).
-    EXPECT_EQ(e->steps[3].kind, EventStepKind::KillCreature);
-    EXPECT_EQ(e->steps[3].creatureEntry, 7796u);  // Nekrum
-    EXPECT_TRUE(e->steps[3].engage);
-    EXPECT_EQ(e->steps[4].kind, EventStepKind::KillCreature);
-    EXPECT_EQ(e->steps[4].creatureEntry, 7275u);  // Sezz'ziz
-    EXPECT_TRUE(e->steps[4].engage);
-
-    // 4. goblin FIRST (opens the door), then a short dwell before provoking Bly.
-    //    Both gossips skip if the NPC is dead so a lost helper can't deadlock, and
-    //    wait for the crew to finish walking down before talking.
-    EXPECT_EQ(e->steps[5].kind, EventStepKind::Gossip);
-    EXPECT_EQ(e->steps[5].creatureEntry, 7607u);  // Weegli
-    EXPECT_TRUE(e->steps[5].skipIfMissing);
-    EXPECT_TRUE(e->steps[5].waitForStill);
-    EXPECT_EQ(e->steps[6].kind, EventStepKind::Wait);
-    EXPECT_GT(e->steps[6].durationMs, 0u);
-
-    // 5. human starts the fight; killing Bly ends the event.
-    EXPECT_EQ(e->steps[7].kind, EventStepKind::Gossip);
-    EXPECT_EQ(e->steps[7].creatureEntry, 7604u);  // Bly
-    EXPECT_TRUE(e->steps[7].skipIfMissing);
-    EXPECT_TRUE(e->steps[7].waitForStill);
-    EXPECT_EQ(e->steps[8].kind, EventStepKind::KillCreature);
-    EXPECT_EQ(e->steps[8].creatureEntry, 7604u);
-    EXPECT_TRUE(e->steps[8].engage);
-}
-
-// ZulFarrak Sacred Pool (Gahz'rilla) event (map 209, id 2): a PERSISTENT anchored
-// step list ordered LAST (anchor at encounterIndex 8). Ring the gong (UseGO 141832)
-// to summon Gahz'rilla, WAIT for it to emerge, then engage and kill it. The
-// WaitForSpawn between the ring and the kill is essential — without it the kill
-// step would read "no live boss" before the summon and false-complete.
-TEST(DungeonEventRegistryTest, ZulFarrakGahzrillaEventShape)
-{
-    DungeonEvent const* e = DungeonEventRegistry::Find(209, 2);
+    namespace Z = DcZulFarrak;
+    DungeonEvent const* e = DungeonEventRegistry::Find(209, Z::EVENT_PYRAMID);
     ASSERT_NE(e, nullptr);
     EXPECT_EQ(e->activation, EventActivation::Anchored);
     EXPECT_TRUE(e->persistent);
     EXPECT_TRUE(e->required);
 
     ASSERT_EQ(e->steps.size(), 3u);
+    EXPECT_EQ(e->steps[0].kind, EventStepKind::KillCreature);
+    EXPECT_EQ(e->steps[0].creatureEntry, 7274u);  // the Executioner, before any cage
+    EXPECT_TRUE(e->steps[0].engage);
+    EXPECT_EQ(e->steps[1].kind, EventStepKind::UseGameObject);
+    EXPECT_EQ(e->steps[1].goEntry, 141073u);
 
-    // 1. ring the gong -> summons Gahz'rilla (go->Use cheats the lock, no mallet).
-    EXPECT_EQ(e->steps[0].kind, EventStepKind::UseGameObject);
-    EXPECT_EQ(e->steps[0].goEntry, 141832u);
+    EventStep const& hold = e->steps[2];
+    EXPECT_EQ(hold.kind, EventStepKind::MoveTo);
+    EXPECT_EQ(hold.instanceDataId, 20);   // DATA_PYRAMID_STAGE
+    EXPECT_EQ(hold.instanceDataMin, 3u);  // the Altar in play
+    EXPECT_NEAR(hold.x, 1885.8f, 0.01f);
+    EXPECT_NEAR(hold.y, 1271.2f, 0.01f);
+    EXPECT_NEAR(hold.z, 42.0f, 0.01f);
+    // Inside the instance's landing disc (r 10), where a living player restarts
+    // a wiped Stair after 10s; above the lane's lip (y 1259).
+    EXPECT_LE(hold.radius + 3.0f, Z::LANDING_INSTANCE_RADIUS);
+    EXPECT_GT(hold.y - hold.radius, 1259.0f);
+    EXPECT_GE(hold.timeoutMs, 600000u);
+}
 
-    // 2. hold until the summoned boss has materialised.
-    EXPECT_EQ(e->steps[1].kind, EventStepKind::WaitForSpawn);
-    EXPECT_EQ(e->steps[1].creatureEntry, 7273u);
-    EXPECT_TRUE(e->steps[1].wantAlive);
-
-    // 3. engage and kill it (the pool boss does not auto-aggro).
-    EXPECT_EQ(e->steps[2].kind, EventStepKind::KillCreature);
-    EXPECT_EQ(e->steps[2].creatureEntry, 7273u);
+// The Altar (event 7): wait for Nekrum or Sezz'ziz to exist (they spawn idle 5s
+// after the Stair is won; a kill step run before that completes on nothing),
+// kill both, hold until the stage reads won, and rewind when a stage 3 wipe has
+// put them back idle.
+TEST(DungeonEventRegistryTest, ZulFarrakAltarEventShape)
+{
+    namespace Z = DcZulFarrak;
+    DungeonEvent const* e = DungeonEventRegistry::Find(209, Z::EVENT_ALTAR);
+    ASSERT_NE(e, nullptr);
+    EXPECT_EQ(e->activation, EventActivation::Anchored);
+    EXPECT_TRUE(e->persistent);
+    ASSERT_EQ(e->steps.size(), 4u);
+    EXPECT_EQ(e->steps[0].kind, EventStepKind::Custom);
+    EXPECT_EQ(e->steps[0].hookId, Z::HOOK_ALTAR_READY);
+    EXPECT_EQ(e->steps[1].creatureEntry, 7796u);  // Nekrum
+    EXPECT_TRUE(e->steps[1].engage);
+    EXPECT_EQ(e->steps[2].creatureEntry, 7275u);  // Sezz'ziz
     EXPECT_TRUE(e->steps[2].engage);
+    EXPECT_EQ(e->steps[3].kind, EventStepKind::MoveTo);
+    EXPECT_EQ(e->steps[3].instanceDataId, 20);
+    EXPECT_EQ(e->steps[3].instanceDataMin, 4u);
+    EXPECT_EQ(e->steps[3].hookId, Z::HOOK_ALTAR_REARM);
+    for (uint32 hook : { Z::HOOK_ALTAR_READY, Z::HOOK_ALTAR_REARM })
+        EXPECT_TRUE(ObjectiveHookRegistry::Has(hook)) << hook;
+}
+
+// Bly's crew (event 8): gossip option 0 (the betrayal: the Test is option 1 and
+// never resolves to 0), then the crew slot, then the End Door. The fight's end is
+// slot 6 DONE, not a kill of Bly: on heroic the fallen bodies die together with
+// the last one, whatever the order.
+TEST(DungeonEventRegistryTest, ZulFarrakCrewEventShape)
+{
+    namespace Z = DcZulFarrak;
+    DungeonEvent const* e = DungeonEventRegistry::Find(209, Z::EVENT_CREW);
+    ASSERT_NE(e, nullptr);
+    EXPECT_EQ(e->activation, EventActivation::Anchored);
+    EXPECT_TRUE(e->persistent);
+    EXPECT_TRUE(e->required);
+    ASSERT_EQ(e->steps.size(), 4u);
+
+    EXPECT_EQ(e->steps[0].kind, EventStepKind::Gossip);
+    EXPECT_EQ(e->steps[0].creatureEntry, 7604u);  // Bly
+    EXPECT_EQ(e->steps[0].gossipOption, 0);        // the betrayal
+    EXPECT_TRUE(e->steps[0].waitForStill);
+    EXPECT_FALSE(e->steps[0].skipIfMissing);
+
+    // Hold until the fight is on (stock lines first: slot 6 still NOT_STARTED,
+    // so no restart here) ...
+    EXPECT_EQ(e->steps[1].bossStateId, 6);
+    EXPECT_EQ(e->steps[1].bossStateClearMask,
+              DcBossStateBit(Z::STATE_IN_PROGRESS) | DcBossStateBit(Z::STATE_DONE));
+    EXPECT_EQ(e->steps[1].restartOnBossStateMask, 0u);
+    // ... then until it is won; a crew wipe re-gossips.
+    EXPECT_EQ(e->steps[2].bossStateId, 6);
+    EXPECT_EQ(e->steps[2].bossStateClearMask, DcBossStateBit(Z::STATE_DONE));
+    EXPECT_EQ(e->steps[2].restartOnBossStateMask,
+              DcBossStateBit(Z::STATE_NOT_STARTED) | DcBossStateBit(Z::STATE_FAIL));
+    EXPECT_EQ(DecideBossStateGate(Z::STATE_NOT_STARTED, e->steps[1].bossStateClearMask,
+                                  e->steps[1].restartOnBossStateMask),
+              BossStateGateVerdict::Hold);
+    EXPECT_EQ(DecideBossStateGate(Z::STATE_NOT_STARTED, e->steps[2].bossStateClearMask,
+                                  e->steps[2].restartOnBossStateMask),
+              BossStateGateVerdict::Restart);
+
+    // The End Door, blown (GO_STATE_ACTIVE_ALTERNATIVE), reached from the plaza.
+    EXPECT_EQ(e->steps[3].kind, EventStepKind::WaitForGameObjectState);
+    EXPECT_EQ(e->steps[3].goEntry, 146084u);
+    EXPECT_EQ(e->steps[3].wantState, 2u);
+    float const doorDist = std::hypot(1854.53f - Z::BLY_GATHER_X, 1142.89f - Z::BLY_GATHER_Y);
+    EXPECT_GT(e->steps[3].radius, doorDist + 10.0f);
+    // Weegli's walk, the plant and the fuse, or the instance's 60s fallback.
+    EXPECT_GT(e->steps[3].timeoutMs, 60000u);
+}
+
+// The pool (event 2): a normal pull of Velratha (no gong: she strikes it at 30%,
+// the rework's gong is inert), then Gahz'rilla once he is ashore. Optional: the
+// acceptance bar is the clear through Ukorz.
+TEST(DungeonEventRegistryTest, ZulFarrakPoolEventShape)
+{
+    namespace Z = DcZulFarrak;
+    DungeonEvent const* e = DungeonEventRegistry::Find(209, Z::EVENT_POOL);
+    ASSERT_NE(e, nullptr);
+    EXPECT_EQ(e->activation, EventActivation::Anchored);
+    EXPECT_TRUE(e->persistent);
+    EXPECT_FALSE(e->required);
+    ASSERT_EQ(e->steps.size(), 4u);
+    EXPECT_EQ(e->steps[0].creatureEntry, 7795u);  // Velratha
+    EXPECT_TRUE(e->steps[0].engage);
+    EXPECT_EQ(e->steps[1].kind, EventStepKind::Custom);
+    EXPECT_EQ(e->steps[1].hookId, Z::HOOK_POOL_READY);
+    EXPECT_TRUE(ObjectiveHookRegistry::Has(Z::HOOK_POOL_READY));
+    EXPECT_EQ(e->steps[2].creatureEntry, 7273u);  // Gahz'rilla
+    EXPECT_TRUE(e->steps[2].engage);
+    EXPECT_TRUE(e->steps[2].engageOnlyWhenActive);
+    EXPECT_EQ(e->steps[3].bossStateId, 1);
+    EXPECT_EQ(e->steps[3].bossStateClearMask, DcBossStateBit(Z::STATE_DONE));
+    EXPECT_EQ(e->steps[3].restartOnBossStateMask,
+              DcBossStateBit(Z::STATE_NOT_STARTED) | DcBossStateBit(Z::STATE_FAIL));
+    for (EventStep const& s : e->steps)
+        EXPECT_NE(s.kind, EventStepKind::UseGameObject) << "the rework's gong is never clicked";
+}
+
+// The plaza (event 6): one floor-keeping sweep before the cages open.
+TEST(DungeonEventRegistryTest, ZulFarrakPlazaPreClearShape)
+{
+    namespace Z = DcZulFarrak;
+    DungeonEvent const* e = DungeonEventRegistry::Find(209, Z::EVENT_PLAZA);
+    ASSERT_NE(e, nullptr);
+    EXPECT_EQ(e->activation, EventActivation::Anchored);
+    ASSERT_EQ(e->steps.size(), 1u);
+    EXPECT_EQ(e->steps[0].kind, EventStepKind::ClearRadius);
+    EXPECT_FLOAT_EQ(e->steps[0].radius, 47.0f);
+    EXPECT_FLOAT_EQ(e->steps[0].zBand, 5.0f);
+    EXPECT_TRUE(e->steps[0].entryFilter.empty());
+    // Live spawns (2026-11-25): the farthest kept unit and the nearest left out.
+    EXPECT_LT(std::hypot(1849.2f - Z::PLAZA_X, 1184.6f - Z::PLAZA_Y), Z::PLAZA_CLEAR_RADIUS);  // 81539
+    EXPECT_GT(std::hypot(1878.7f - Z::PLAZA_X, 1159.7f - Z::PLAZA_Y), Z::PLAZA_CLEAR_RADIUS);  // 81538
+    // The stair foot (y 1227) and the crew's gather points are inside it.
+    EXPECT_LT(std::hypot(1888.0f - Z::PLAZA_X, 1227.0f - Z::PLAZA_Y), Z::PLAZA_CLEAR_RADIUS);
+}
+
+// Antu'sul's wake (event 5): clear the chamber, stand inside area trigger 1447's
+// sphere, then SetData(1, 1) (hook 69). Conditional and repeatable like Zum'rah's.
+TEST(DungeonEventConditional, ZulFarrakAntusulWakeEventShape)
+{
+    namespace Z = DcZulFarrak;
+    DungeonEvent const* e = DungeonEventRegistry::Find(209, Z::EVENT_WAKE_ANTUSUL);
+    ASSERT_NE(e, nullptr);
+    EXPECT_EQ(e->activation, EventActivation::Conditional);
+    EXPECT_TRUE(static_cast<bool>(e->condition));
+    EXPECT_TRUE(e->repeatable);
+    EXPECT_EQ(e->panelGatesBossEntry, 8127u);
+    EXPECT_FLOAT_EQ(e->summonHoldRadius, Z::ANTUSUL_SUMMON_HOLD_RADIUS);
+
+    ASSERT_EQ(e->steps.size(), 3u);
+    EXPECT_EQ(e->steps[0].kind, EventStepKind::ClearRadius);
+    EXPECT_EQ(e->steps[1].kind, EventStepKind::MoveTo);
+    EXPECT_EQ(e->steps[2].kind, EventStepKind::Custom);
+    EXPECT_EQ(e->steps[2].hookId, Z::HOOK_WAKE_ANTUSUL);
+    EXPECT_TRUE(ObjectiveHookRegistry::Has(Z::HOOK_WAKE_ANTUSUL));
+
+    // The stand is inside the trigger's sphere with its arrive radius to spare,
+    // and in the chamber (y 712-750), not the throat.
+    float const standToTrigger = std::hypot(Z::WAKE_STAND_X - Z::WAKE_TRIGGER_X, Z::WAKE_STAND_Y - Z::WAKE_TRIGGER_Y);
+    EXPECT_LT(standToTrigger + Z::WAKE_STAND_RADIUS, Z::WAKE_TRIGGER_RADIUS);
+    EXPECT_GE(Z::WAKE_STAND_Y - Z::WAKE_STAND_RADIUS, 712.0f);
+
+    // D2's two (live spawns, wander included) inside the chamber clear; the east
+    // shelf (81515 / 81516) outside it.
+    EXPECT_LT(std::hypot(1802.2f - Z::CHAMBER_X, 738.7f - Z::CHAMBER_Y) + 5.0f, Z::CHAMBER_CLEAR_RADIUS);  // 81512
+    EXPECT_LT(std::hypot(1793.9f - Z::CHAMBER_X, 747.2f - Z::CHAMBER_Y) + 3.0f, Z::CHAMBER_CLEAR_RADIUS);  // 81482
+    EXPECT_GT(std::hypot(1843.8f - Z::CHAMBER_X, 722.0f - Z::CHAMBER_Y) - 3.0f, Z::CHAMBER_CLEAR_RADIUS);  // 81515
+    EXPECT_GT(std::hypot(1843.6f - Z::CHAMBER_X, 729.0f - Z::CHAMBER_Y) - 5.0f, Z::CHAMBER_CLEAR_RADIUS);  // 81516
+    // Theka's spot is far outside the approach gate: the wake cannot fire before
+    // his turn.
+    EXPECT_GT(std::hypot(1778.01f - Z::CHAMBER_X, 859.67f - Z::CHAMBER_Y), Z::WAKE_APPROACH_RADIUS + 50.0f);
+}
+
+// The pure gates behind hooks 67-70.
+TEST(DungeonEventRegistryTest, ZulFarrakHookDecisions)
+{
+    namespace Z = DcZulFarrak;
+    using G = Z::Gate;
+    // Altar ready: not before either boss exists, at once when the stage is won.
+    EXPECT_EQ(Z::AltarReady(Z::STAGE_ALTAR, false), G::Running);
+    EXPECT_EQ(Z::AltarReady(Z::STAGE_ALTAR, true), G::Done);
+    EXPECT_EQ(Z::AltarReady(Z::STAGE_WON, false), G::Done);
+    // Altar rearm: only a stage 3 wipe (in play, not running, a boss idle).
+    EXPECT_EQ(Z::AltarRearm(Z::STAGE_ALTAR, false, true), G::Restart);
+    EXPECT_EQ(Z::AltarRearm(Z::STAGE_ALTAR, true, true), G::Running);
+    EXPECT_EQ(Z::AltarRearm(Z::STAGE_ALTAR, false, false), G::Running);
+    EXPECT_EQ(Z::AltarRearm(Z::STAGE_WON, false, true), G::Running);
+    // Pool: wait in the water window, restart on a living Velratha (pool wipe).
+    EXPECT_EQ(Z::PoolReady(Z::STATE_NOT_STARTED, false, false), G::Running);
+    EXPECT_EQ(Z::PoolReady(Z::STATE_NOT_STARTED, true, false), G::Done);
+    EXPECT_EQ(Z::PoolReady(Z::STATE_DONE, false, false), G::Done);
+    EXPECT_EQ(Z::PoolReady(Z::STATE_NOT_STARTED, false, true), G::Restart);
+    // Antu'sul: only alive, calm, and with someone in the sphere.
+    EXPECT_TRUE(Z::WakeAntusulDue(true, false, false, true));
+    EXPECT_FALSE(Z::WakeAntusulDue(true, false, false, false));
+    EXPECT_FALSE(Z::WakeAntusulDue(true, true, false, true));
+    EXPECT_FALSE(Z::WakeAntusulDue(true, false, true, true));
+    EXPECT_FALSE(Z::WakeAntusulDue(false, false, false, true));
+}
+
+// The End Door is the instance's alone: never clicked, never a reason to park.
+// The cages stay ordinary doors (the Pyramid event opens one by UseGO, and their
+// lock keeps the generic rung off them).
+TEST(DungeonEventRegistryTest, ZulFarrakEndDoorIsScriptOnlyAndNavigationIgnored)
+{
+    EXPECT_TRUE(DcEventDoorRegistry::IsScriptOnly(146084));
+    EXPECT_TRUE(DcEventDoorRegistry::IsNavigationIgnored(146084));
+    for (uint32 cage = 141070; cage <= 141074; ++cage)
+    {
+        EXPECT_FALSE(DcEventDoorRegistry::IsScriptOnly(cage)) << cage;
+        EXPECT_FALSE(DcEventDoorRegistry::IsNavigationIgnored(cage)) << cage;
+    }
 }
 
 // Blackrock Depths Ring of Law (map 230): a PERSISTENT anchored event that walks
@@ -1878,14 +2027,17 @@ TEST(DungeonEventBuilderTest, SkipIfTargetMissing)
 // Conditional() returns only EventActivation::Conditional events for the map.
 // Sunken Temple (109) is anchored-only (forcefield ring anchors + statues etc.);
 // Shadowfang Keep (33) has the conditional courtyard-door event; ZulFarrak (209)
-// has exactly one conditional (the Zum'rah wake-up) alongside its two anchored.
+// has three conditionals (the Zum'rah wake-up, the room pre-clears, the Antu'sul
+// wake-up) alongside its five anchored.
 TEST(DungeonEventConditional, ConditionalListFiltersByActivation)
 {
     EXPECT_TRUE(DungeonEventRegistry::Conditional(109).empty());  // anchored only
 
     std::vector<DungeonEvent const*> zf = DungeonEventRegistry::Conditional(209);
-    ASSERT_EQ(zf.size(), 1u);
+    ASSERT_EQ(zf.size(), 3u);
     EXPECT_EQ(zf[0]->id, 3u);  // Wake Witch Doctor Zum'rah
+    EXPECT_EQ(zf[1]->id, 4u);  // Clear the room (room-aggro pre-clear)
+    EXPECT_EQ(zf[2]->id, 5u);  // Wake Antu'sul
 
     // SFK has the two faction-specific courtyard events (Alliance + Horde) plus
     // the Sorcerer's Gate voidwalker sweep.

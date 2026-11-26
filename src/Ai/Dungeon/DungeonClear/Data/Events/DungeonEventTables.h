@@ -190,6 +190,247 @@ namespace DcRagefireChasm
     constexpr uint32 GO_SEARING_SPIKE    = 301342;
 }
 
+// Zul'Farrak (map 209), the rework: the clear order, the Pyramid's stage data, the
+// crew's betrayal path, the pool, the room pre-clears and the objects a bot never
+// clicks, shared with the gtests. The reasoning is in ZulFarrakEvents.cpp; the
+// instance contract is mod-dungeon-bosses' ZulFarrakRework.h (slots, data ids,
+// points); distances are measured from the live spawns.
+namespace DcZulFarrak
+{
+    constexpr uint32 MAP_ID = 209;
+
+    constexpr uint32 NPC_VELRATHA    = 7795;
+    constexpr uint32 NPC_GAHZRILLA   = 7273;
+    constexpr uint32 NPC_ANTUSUL     = 8127;
+    constexpr uint32 NPC_THEKA       = 7272;
+    constexpr uint32 NPC_ZUMRAH      = 7271;
+    constexpr uint32 NPC_UKORZ       = 7267;
+    constexpr uint32 NPC_EXECUTIONER = 7274;
+    constexpr uint32 NPC_SEZZZIZ     = 7275;
+    constexpr uint32 NPC_NEKRUM      = 7796;
+    constexpr uint32 NPC_BLY         = 7604;
+
+    // DungeonEncounter bits = the rework instance's boss state slots.
+    constexpr uint32 SLOT_VELRATHA  = 0;
+    constexpr uint32 SLOT_GAHZRILLA = 1;
+    constexpr uint32 SLOT_PYRAMID   = 5;   // written by the instance: DONE when the Altar is won
+    constexpr uint32 SLOT_CREW      = 6;   // written by the instance: the crew fight
+    constexpr uint32 SLOT_UKORZ     = 7;
+
+    // EncounterState (InstanceScript.h), for the boss-state gates.
+    constexpr uint32 STATE_NOT_STARTED = 0;
+    constexpr uint32 STATE_IN_PROGRESS = 1;
+    constexpr uint32 STATE_FAIL        = 2;
+    constexpr uint32 STATE_DONE        = 3;
+
+    // Instance data (ZulFarrakRework.h).
+    constexpr uint32 DATA_END_DOOR        = 2;    // 3 = blown (saved)
+    constexpr uint32 DATA_PYRAMID_STAGE   = 20;   // 0 none, 1 Block, 2 Stair, 3 Altar, 4 won: the stage in play
+    constexpr uint32 DATA_PYRAMID_RUNNING = 21;   // 1 while a stage runs
+    constexpr uint32 END_DOOR_BLOWN       = 3;
+    constexpr uint32 STAGE_ALTAR          = 3;
+    constexpr uint32 STAGE_WON            = 4;
+
+    // Antu'sul's wake: what area trigger 1447's SmartAI does, creature SetData(1, 1).
+    constexpr uint32 ANTUSUL_WAKE_DATA_ID = 1;
+    constexpr uint32 ANTUSUL_WAKE_VALUE   = 1;
+
+    // Events.
+    constexpr uint32 EVENT_PYRAMID      = 1;  // the Executioner, a cage, the Stair held on the landing
+    constexpr uint32 EVENT_POOL         = 2;  // Velratha, then Gahz'rilla (an optional anchor)
+    constexpr uint32 EVENT_WAKE_ZUMRAH  = 3;  // stock wake (hook 5), now after his room
+    constexpr uint32 EVENT_ROOM_AGGRO   = 4;  // the room pre-clears (RoomAggroRegistry rows)
+    constexpr uint32 EVENT_WAKE_ANTUSUL = 5;  // the chamber cleared, then his wake
+    constexpr uint32 EVENT_PLAZA        = 6;  // the plaza pre-clear, before the cages open
+    constexpr uint32 EVENT_ALTAR        = 7;  // Nekrum and Sezz'ziz
+    constexpr uint32 EVENT_CREW         = 8;  // Bly's betrayal, the four, the End Door
+
+    // Objective anchors, OBJ(n).
+    constexpr uint32 OBJ_PYRAMID = 1;
+    constexpr uint32 OBJ_POOL    = 2;
+    constexpr uint32 OBJ_PLAZA   = 3;
+    constexpr uint32 OBJ_ALTAR   = 4;
+    constexpr uint32 OBJ_CREW    = 5;
+
+    // Clear order (HANDOFF section 3.12): Theka, Antu'sul, Zum'rah, the Pyramid
+    // (plaza, top, Altar), the crew, Ukorz; the run is complete there ("the pool
+    // not required"). The pool (Velratha and Gahz'rilla) follows as an
+    // optional-by-design anchor: skipped by default, run by `dc boss pool` or
+    // the zf-pool test scenario.
+    constexpr int32 ORDER_THEKA    = 1;
+    constexpr int32 ORDER_ANTUSUL  = 2;
+    constexpr int32 ORDER_ZUMRAH   = 3;
+    constexpr int32 ORDER_PLAZA    = 4;
+    constexpr int32 ORDER_PYRAMID  = 5;
+    constexpr int32 ORDER_ALTAR    = 6;
+    constexpr int32 ORDER_CREW     = 7;
+    constexpr int32 ORDER_UKORZ    = 8;
+    constexpr int32 ORDER_POOL     = 9;
+
+    // Hook ids (ObjectiveHookRegistry: one flat space). 5 is the stock WakeZumrah.
+    constexpr uint32 HOOK_WAKE_ZUMRAH  = 5;
+    constexpr uint32 HOOK_ALTAR_READY  = 67;
+    constexpr uint32 HOOK_ALTAR_REARM  = 68;
+    constexpr uint32 HOOK_WAKE_ANTUSUL = 69;
+    constexpr uint32 HOOK_POOL_READY   = 70;
+
+    // Objects. A Troll Cage (any of 141070-141074) starts the Stair once the
+    // Executioner is dead; 141073 sits 9yd off the top's anchor. The End Door is
+    // the instance's alone (Weegli's barrel or its 60s fallback): lock 0, so the
+    // generic door rung never clicks it, and navigation-ignored
+    // (DcEventDoorRegistry). The gong is inert in the rework: Velratha strikes it.
+    constexpr uint32 GO_TROLL_CAGE = 141073;
+    constexpr uint32 GO_END_DOOR   = 146084;
+    constexpr uint32 GO_GONG       = 141832;
+    constexpr uint32 GO_STATE_ACTIVE_ALTERNATIVE = 2;   // the blown End Door
+
+    // The top: the Executioner's spawn, the Pyramid objective's anchor.
+    constexpr float TOP_X = 1886.8f;
+    constexpr float TOP_Y = 1289.9f;
+    constexpr float TOP_Z = 46.0f;
+    constexpr float TOP_ARRIVE_RADIUS = 12.0f;
+    // The landing: the Stair's hold, and the instance's stage 2 restart spot (a
+    // living player 10s on its r 10 disc). Not the old ramp hold (1886, 1250,
+    // 30), which is inside the barrel lane.
+    constexpr float LANDING_X = 1885.8f;
+    constexpr float LANDING_Y = 1271.2f;
+    constexpr float LANDING_Z = 42.0f;
+    constexpr float LANDING_HOLD_RADIUS = 6.0f;
+    constexpr float LANDING_INSTANCE_RADIUS = 10.0f;
+
+    // The plaza (the waves' foot, the Altar, the crew). Pre-cleared before the
+    // cages open (section 7 #20 A): every unit on the floor within 47yd of its
+    // center, Blood Drinker 81539 the farthest (46.4yd). The next ring out
+    // (Shadowhunter 81538 51.2yd, the End Door side 61-74yd) is the Ukorz leg's.
+    constexpr float PLAZA_X = 1888.0f;
+    constexpr float PLAZA_Y = 1210.0f;
+    constexpr float PLAZA_Z = 9.3f;
+    constexpr float PLAZA_ARRIVE_RADIUS = 15.0f;
+    constexpr float PLAZA_CLEAR_RADIUS = 47.0f;
+    constexpr float PLAZA_CLEAR_Z_BAND = 5.0f;
+    constexpr float ALTAR_HOLD_RADIUS = 20.0f;
+
+    // Bly's gather point (section 7 #33 A): the crew objective's anchor.
+    constexpr float BLY_GATHER_X = 1883.82f;
+    constexpr float BLY_GATHER_Y = 1208.83f;
+    constexpr float BLY_GATHER_Z = 9.41f;
+    constexpr float CREW_ARRIVE_RADIUS = 10.0f;
+    constexpr float CREW_HOLD_RADIUS = 30.0f;
+    // The End Door is 67yd from the gather point.
+    constexpr float END_DOOR_SEARCH = 100.0f;
+
+    // Antu'sul: the chamber (y 712-750) and a stand inside area trigger 1447's
+    // sphere (30yd round (1811.05, 700.98, 15.29)), 21yd from its center.
+    constexpr float CHAMBER_X = 1806.0f;
+    constexpr float CHAMBER_Y = 730.0f;
+    constexpr float CHAMBER_Z = 15.2f;
+    constexpr float WAKE_TRIGGER_X = 1811.05f;
+    constexpr float WAKE_TRIGGER_Y = 700.98f;
+    constexpr float WAKE_TRIGGER_Z = 15.29f;
+    constexpr float WAKE_TRIGGER_RADIUS = 30.0f;
+    constexpr float WAKE_STAND_X = 1808.0f;
+    constexpr float WAKE_STAND_Y = 722.0f;
+    constexpr float WAKE_STAND_Z = 15.2f;
+    constexpr float WAKE_STAND_RADIUS = 4.0f;
+    // The leader this close to the chamber makes the wake due.
+    constexpr float WAKE_APPROACH_RADIUS = 60.0f;
+    // Chamber pre-clear (D2): Sandcrawler 81512 9.6yd from the center (wander 5),
+    // Witch Doctor 81482 21.0yd (wander 3), and the Blood Drinker patrol 815140
+    // while it crosses (6yd at its closest). The east shelf (Shadowhunter 81515
+    // 37.8yd, Sandcrawler 81516 37.6yd, 3 to 5yd up) and the west pair
+    // (Shadowhunter 81517 53.5yd, patrol 600048 44.6yd) stay out.
+    constexpr float CHAMBER_CLEAR_RADIUS = 26.0f;
+    constexpr float CHAMBER_CLEAR_Z_BAND = 8.0f;
+    constexpr float ANTUSUL_SCAN = 150.0f;
+    // The dynamic pull stands down this close to his anchor (the dead end, 60yd
+    // south of the chamber): the throat only, so the pull still works the chamber.
+    constexpr float ANTUSUL_SUMMON_HOLD_RADIUS = 30.0f;
+
+    // The pool: the objective sits on the gong's bank, where Velratha strikes
+    // the gong at 30% and fights on (F-1d DQ-2 A: 8.4yd from the gong, 4yd past
+    // the pool strip's end, out of the water; the gong itself, (1650.91,
+    // 1171.88), stands over the strip). Gahz'rilla comes ashore at (1677, 1167).
+    constexpr float POOL_BANK_X = 1645.0f;
+    constexpr float POOL_BANK_Y = 1165.5f;
+    constexpr float POOL_BANK_Z = 9.3f;
+    constexpr float POOL_ARRIVE_RADIUS = 12.0f;
+    constexpr float POOL_HOLD_RADIUS = 40.0f;
+
+    // Room pre-clears (RoomAggroRegistry). The bosses neither call nor answer
+    // assistance (flags + NoAssist every tick); the rows clear what each fight
+    // would otherwise run into.
+    //   Theka's courtyard: his three escorts (Blood Drinker 81457 3.4yd, Soul
+    //     Eater 81456 5.7yd, Witch Doctor 45710 11.9yd at spawn; their patrols
+    //     reach 110 / 102 / 165yd). The Scarabs are neutral; the ledge Witch
+    //     Doctor 81468 (46yd, 14yd up, wander 5) stays out.
+    constexpr float THEKA_ROOM_RADIUS  = 40.0f;
+    constexpr float THEKA_ROOM_PULLOUT = 2.5f;
+    //   Zum'rah's bowl: the two Witch Doctor patrols, 815260 (32.4yd at the
+    //     closest) and 815050 (49.6yd). No static trash within 70yd.
+    constexpr float ZUMRAH_ROOM_RADIUS = 52.0f;
+    //   Ukorz's mesa: the four Guardians (one formation, 35.4 to 41.5yd), the two
+    //     Abominations (48.9 / 52.3yd, wander 5) and the ramp's Shadowhunter pair
+    //     at its closest (56yd). Ruuzlu (3.6yd) comes with him.
+    constexpr float UKORZ_ROOM_RADIUS  = 58.0f;
+    constexpr float UKORZ_ROOM_PULLOUT = 20.0f;
+
+    // --- pure decisions (pinned in t/TestDungeonEvent) ----------------------
+    // A hook step's answer, without the ObjectiveHookRegistry include.
+    enum class Gate : uint8
+    {
+        Running,
+        Done,
+        Restart,
+    };
+
+    // The Altar's front step. Nekrum and Sezz'ziz (and wave 3) come into the
+    // world idle, immune to NPCs, the moment the Stair is won (DATA_PYRAMID_STAGE
+    // reads 3 at once, STAGE-D4b s5); the stage itself starts 5s later or at
+    // their first pull, whichever comes first, so the gate passes at once either
+    // way. Kept for a reload or a slow spawn: a kill step run before they exist
+    // reads "none alive" and completes on nothing. Wait for either of them, or
+    // for the stage to be won already.
+    constexpr Gate AltarReady(uint32 stage, bool altarBossAlive)
+    {
+        if (stage >= STAGE_WON || altarBossAlive)
+            return Gate::Done;
+        return Gate::Running;
+    }
+
+    // While the party holds the plaza until the Altar is won. A stage 3 wipe
+    // puts both bosses back idle (the instance's OnWait), and a kill step already
+    // passed never comes back to them: rewind when the Altar is in play, not
+    // running, and one of them stands alive out of combat.
+    constexpr Gate AltarRearm(uint32 stage, bool running, bool idleAltarBossAlive)
+    {
+        if (stage == STAGE_ALTAR && !running && idleAltarBossAlive)
+            return Gate::Restart;
+        return Gate::Running;
+    }
+
+    // Gahz'rilla's front step. He is not selectable in the water for up to 15s
+    // after Velratha strikes the gong: Done once he can be attacked (or the
+    // encounter is DONE). A living Velratha means a pool wipe brought her back,
+    // so the event starts over from her pull.
+    constexpr Gate PoolReady(uint32 gahzrillaSlot, bool gahzrillaAttackable, bool velrathaAlive)
+    {
+        if (gahzrillaSlot == STATE_DONE || gahzrillaAttackable)
+            return Gate::Done;
+        if (velrathaAlive)
+            return Gate::Restart;
+        return Gate::Running;
+    }
+
+    // Antu'sul's wake (D2): a living party member within 30yd of area trigger
+    // 1447's center, and he alive, out of combat and not evading. He ignores a
+    // repeat while he fights, so once a tick is safe.
+    constexpr bool WakeAntusulDue(bool antusulAlive, bool antusulInCombat, bool antusulEvading,
+                                  bool memberInTrigger)
+    {
+        return antusulAlive && !antusulInCombat && !antusulEvading && memberInTrigger;
+    }
+}
+
 // Scarlet Monastery (map 189) — the numbers ScarletMonasteryEvents.cpp's roster
 // patch and wings share with the gtests (t/TestRunWing, t/TestSealedEncounter).
 // The reasoning for each is in that file.

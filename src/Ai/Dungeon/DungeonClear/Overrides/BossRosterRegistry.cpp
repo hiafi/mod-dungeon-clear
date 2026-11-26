@@ -193,6 +193,17 @@ bool BossRosterRegistry::HasPatch(uint32 mapId)
     return FindPatch(mapId) != nullptr;
 }
 
+std::vector<uint32> BossRosterRegistry::OptionalEntries(uint32 mapId)
+{
+    std::vector<uint32> out;
+    for (BossRosterPatch const& patch : PatchTable())
+        if (patch.mapId == mapId)
+            for (DungeonBossInfo const& a : patch.add)
+                if (a.optionalByDesign && std::find(out.begin(), out.end(), a.entry) == out.end())
+                    out.push_back(a.entry);
+    return out;
+}
+
 std::vector<DungeonBossInfo> BossRosterRegistry::Apply(uint32 mapId, DcDiffKey key,
                                                        std::vector<DungeonBossInfo> base)
 {

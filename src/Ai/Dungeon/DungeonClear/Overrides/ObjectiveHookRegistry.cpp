@@ -853,6 +853,7 @@ namespace
             RegisterBlackrockDepthsHooks(t);
             RegisterBlackrockSpireHooks(t);
             RegisterBlackfathomDeepsHooks(t);
+            RegisterZulFarrakHooks(t);
             return t;
         }();
         return kHooks;

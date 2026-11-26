@@ -11,6 +11,8 @@
 #include <vector>
 
 #include "Ai/Dungeon/DungeonClear/Data/DungeonWingRegistry.h"
+#include "Ai/Dungeon/DungeonClear/Data/Events/DungeonEventTables.h"
+#include "Ai/Dungeon/DungeonClear/Overrides/BossRosterRegistry.h"
 #include "TestRun/DcTestDungeonRegistry.h"
 
 using DcTestDungeonRegistry::All;
@@ -46,14 +48,16 @@ TEST(DcTestDungeonRegistryTest, HeroicLevelMatchesTheExpansionCap)
     // gate, and a heroic run is run at its expansion's cap: TBC rows carry 70,
     // WotLK rows 80. Classic dungeons have no stock heroic difficulty, so 0,
     // except a rework whose heroic is offered to the bots: the classic cap, 60.
-    std::set<std::uint32_t> const classicHeroicMaps = {389};  // Ragefire Chasm
+    std::set<std::uint32_t> const classicHeroicMaps = {389, 209};  // Ragefire Chasm, Zul'Farrak
     std::set<std::uint32_t> const tbcMaps =
         {543, 542, 547, 546, 557, 558, 556, 560, 555, 545, 540, 269, 553, 554, 552, 585};
     std::set<std::uint32_t> const wotlkMaps =
         {574, 575, 576, 578, 595, 599, 600, 601, 602, 604, 608, 619, 632, 650, 658, 668};
     for (Row const& row : All())
     {
-        if (tbcMaps.count(row.mapId))
+        if (DcTestDungeonRegistry::IsScenario(row))
+            EXPECT_EQ(row.heroicLevel, 0u) << row.token;   // a scenario inherits no heroic mode (zf-pool)
+        else if (tbcMaps.count(row.mapId))
             EXPECT_EQ(row.heroicLevel, 70u) << row.token;
         else if (wotlkMaps.count(row.mapId))
             EXPECT_EQ(row.heroicLevel, 80u) << row.token;
@@ -89,6 +93,44 @@ TEST(DcTestDungeonRegistryTest, RagefireChasmRunsAtSeventeenAndHeroicAtSixty)
     EXPECT_EQ(row->overallTimeoutS, 0u);
     EXPECT_EQ(Find("389"), row);
     EXPECT_EQ(DungeonWingRegistry::Get(389), nullptr);
+}
+
+TEST(DcTestDungeonRegistryTest, ZulFarrakRunsAtFortySixAndHeroicAtSixty)
+{
+    // Normal bosses 44-46 (heroic 60). One section, entering where the Finder does
+    // (areatrigger 924's target). The global no-progress net stays (600s): the
+    // Pyramid's waves and the crew re-arm the clock fight by fight.
+    Row const* row = Find("zf");
+    ASSERT_NE(row, nullptr);
+    EXPECT_EQ(row->mapId, 209u);
+    EXPECT_EQ(row->recommendedLevel, 46u);
+    EXPECT_EQ(row->heroicLevel, 60u);
+    EXPECT_STREQ(row->wing, "");
+    EXPECT_NEAR(row->x, 1213.52f, 0.01f);
+    EXPECT_NEAR(row->y, 841.59f, 0.01f);
+    EXPECT_EQ(row->noProgressS, 0u);
+    EXPECT_EQ(row->overallTimeoutS, 0u);
+    EXPECT_EQ(Find("209"), row);
+    EXPECT_EQ(DungeonWingRegistry::Get(209), nullptr);
+}
+
+// The pool is the bar's second run (HANDOFF section 3.12): a scenario of `zf`
+// from the same entrance whose only focus is the optional pool objective. The
+// numeric lookup still means the whole dungeon.
+TEST(DcTestDungeonRegistryTest, ZulFarrakPoolIsAScenarioOfZf)
+{
+    Row const* row = Find("zf-pool");
+    ASSERT_NE(row, nullptr);
+    EXPECT_TRUE(DcTestDungeonRegistry::IsScenario(*row));
+    EXPECT_STREQ(row->scenarioOf, "zf");
+    EXPECT_EQ(row->mapId, 209u);
+    EXPECT_EQ(row->recommendedLevel, 46u);
+    ASSERT_EQ(row->focusEntries.size(), 1u);
+    EXPECT_EQ(row->focusEntries[0], BossRosterRegistry::ObjectiveEntry(DcZulFarrak::OBJ_POOL));
+    EXPECT_FALSE(row->success.IsSet());
+    EXPECT_NEAR(row->x, 1213.52f, 0.01f);
+    EXPECT_EQ(DcTestDungeonRegistry::ValidateScenario(*row, DcTestDungeonRegistry::All()), "");
+    EXPECT_STREQ(Find("209")->token, "zf");
 }
 
 TEST(DcTestDungeonRegistryTest, FindByNumericMapId)

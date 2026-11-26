@@ -91,6 +91,11 @@ public:
 
     // True if any patch exists for the map (cheap gate for callers).
     static bool HasPatch(uint32 mapId);
+
+    // The entries of the map's added anchors marked optionalByDesign (every
+    // patch of the map, whatever its gate: seeding a skip for an anchor a run
+    // does not have is harmless). Empty for most maps.
+    static std::vector<uint32> OptionalEntries(uint32 mapId);
 };
 
 #endif

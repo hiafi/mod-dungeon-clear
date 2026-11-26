@@ -437,6 +437,14 @@ namespace DcEventDoorRegistry
             case 104600:  // Scarlet Monastery — High Inquisitor's Door (the Last Stand's end)
             case 97700:   // Scarlet Monastery — Secret Door (the Torch, D14H)
                 return true;
+            // Zul'Farrak (209), the rework: the End Door (146084, guid 27086), the
+            // way to Ukorz's mesa. Lock 0 and no NOT_SELECTABLE flag until it is
+            // blown, so only the lock-free rule keeps a bot off it today; the
+            // instance alone opens it (Weegli's barrel at the end of the crew
+            // fight, or its own 60s fallback; GO_STATE_ACTIVE_ALTERNATIVE). A
+            // click would skip the crew. Navigation-ignored too (below).
+            case 146084:  // Zul'Farrak: End Door (the crew fight's end)
+                return true;
             default:
                 return false;
         }
@@ -481,6 +489,18 @@ namespace DcEventDoorRegistry
             // across the nave).
             case 104591:  // Scarlet Monastery — Chapel Door (starts the Last Stand)
             case 104589:  // Scarlet Monastery — the Chapel Door's Lever
+                return true;
+            // Zul'Farrak (209), the rework: the End Door (146084). The navmesh
+            // routes through it shut (NAVMESH-REPORT: with 6yd round it cut, only
+            // Ukorz loses his route), and nothing DC does opens it. The run never
+            // routes through it shut: the crew objective, the one before Ukorz,
+            // completes only once the instance reads it blown (DATA_END_DOOR 3), so
+            // a shut door here is never a reason to park or auto-pause. Its cluster
+            // has no other door GO: within 40yd of it stands nothing else (Weegli's
+            // barrel, 141612, is a summoned trap, type 6); the map's only other
+            // door-type GOs are the five Troll Cages on the Pyramid's top, 150yd
+            // away, which the Pyramid event opens with a UseGO.
+            case 146084:  // Zul'Farrak: End Door (the crew fight's end)
                 return true;
             // Blackrock Depths — the Black Vault's other shut door GOs. With the
             // Dark Coffer ignored, the blocking-door value flagged the next shut

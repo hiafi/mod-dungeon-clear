@@ -268,6 +268,7 @@ void DcTestRunJob::InitIdentity(Player* gm, DcTestDungeonRegistry::Row const& ro
     _isScenario = DcTestDungeonRegistry::IsScenario(row);
     _runItemId = row.runItemId;
     _focus = row.focusEntries;
+    _focusOptInInstance = 0;
     _success = row.success;
     _successGraceMs = row.successGraceS * 1000;
     _grace = DcTestRun::ScenarioGrace{};
@@ -1535,7 +1536,11 @@ void DcTestRunJob::TickStarting()
             if (ref.isBoss)
                 _record.bossRoster.push_back(ref.name);
         }
-        _record.bossesTotal = static_cast<uint32>(_roster.size());
+        // An optional-by-design anchor (Zul'Farrak's pool) starts skipped and is
+        // not part of a full run's bar: count only the rest. A scenario that
+        // focuses one counts its focus below.
+        _record.bossesTotal = static_cast<uint32>(std::count_if(
+            bosses.begin(), bosses.end(), [](DungeonBossInfo const& b) { return !b.optionalByDesign; }));
 
         // SCENARIO: the run is scoped to its focus. Every focus entry must be
         // on this map's live roster — the registry gtest can only check the
@@ -1700,6 +1705,17 @@ void DcTestRunJob::ApplyScenarioSkips(Player* tank, AiObjectContext* ctx)
     for (BossRef const& ref : _roster)
         if (std::find(_focus.begin(), _focus.end(), ref.entry) == _focus.end())
             skipped.insert(ref.entry);
+    // A focused optional-by-design anchor starts skipped (DcTargeting::
+    // SeedOptionalSkips, again on a run-instance change): the scenario opts its
+    // focus in, once per run instance, so a focus the run itself skipped later
+    // (an optional event that failed) stays skipped.
+    uint32 const runInstance = ctx->GetValue<uint32>(DcKey::RunInstance)->Get();
+    if (runInstance != _focusOptInInstance)
+    {
+        for (uint32 const entry : _focus)
+            skipped.erase(entry);
+        _focusOptInInstance = runInstance;
+    }
 }
 
 void DcTestRunJob::CaptureExtras(Player* tank)
