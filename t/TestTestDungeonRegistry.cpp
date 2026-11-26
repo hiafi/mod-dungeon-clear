@@ -46,7 +46,7 @@ TEST(DcTestDungeonRegistryTest, HeroicLevelMatchesTheExpansionCap)
     // gate, and a heroic run is run at its expansion's cap: TBC rows carry 70,
     // WotLK rows 80. Classic dungeons have no stock heroic difficulty, so 0,
     // except a rework whose heroic is offered to the bots: the classic cap, 60.
-    std::set<std::uint32_t> const classicHeroicMaps = {389};  // Ragefire Chasm
+    std::set<std::uint32_t> const classicHeroicMaps = {389, 209};  // Ragefire Chasm, Zul'Farrak
     std::set<std::uint32_t> const tbcMaps =
         {543, 542, 547, 546, 557, 558, 556, 560, 555, 545, 540, 269, 553, 554, 552, 585};
     std::set<std::uint32_t> const wotlkMaps =
@@ -89,6 +89,25 @@ TEST(DcTestDungeonRegistryTest, RagefireChasmRunsAtSeventeenAndHeroicAtSixty)
     EXPECT_EQ(row->overallTimeoutS, 0u);
     EXPECT_EQ(Find("389"), row);
     EXPECT_EQ(DungeonWingRegistry::Get(389), nullptr);
+}
+
+TEST(DcTestDungeonRegistryTest, ZulFarrakRunsAtFortySixAndHeroicAtSixty)
+{
+    // Normal bosses 44-46 (heroic 60). One section, entering where the Finder does
+    // (areatrigger 924's target). The global no-progress net stays (600s): the
+    // Pyramid's waves and the crew re-arm the clock fight by fight.
+    Row const* row = Find("zf");
+    ASSERT_NE(row, nullptr);
+    EXPECT_EQ(row->mapId, 209u);
+    EXPECT_EQ(row->recommendedLevel, 46u);
+    EXPECT_EQ(row->heroicLevel, 60u);
+    EXPECT_STREQ(row->wing, "");
+    EXPECT_NEAR(row->x, 1213.52f, 0.01f);
+    EXPECT_NEAR(row->y, 841.59f, 0.01f);
+    EXPECT_EQ(row->noProgressS, 0u);
+    EXPECT_EQ(row->overallTimeoutS, 0u);
+    EXPECT_EQ(Find("209"), row);
+    EXPECT_EQ(DungeonWingRegistry::Get(209), nullptr);
 }
 
 TEST(DcTestDungeonRegistryTest, FindByNumericMapId)

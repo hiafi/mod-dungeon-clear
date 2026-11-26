@@ -832,3 +832,77 @@ TEST(RoomAggroRegistryTest, RagefireTaragamanTakesThePatrolAndTheWestArmFoot)
                                   RagefirePos{ -199.19f, 159.01f, -25.14f } })
         EXPECT_FALSE(RagefireKept(*r, RFC_TARAGAMAN, p)) << p.x << ", " << p.y;
 }
+
+// --- Zul'Farrak (209), the rework ------------------------------------------
+// Live spawns (acore_world.creature and waypoint_data, 2026-11-25).
+namespace
+{
+    struct ZfPos { float x, y, z; };
+
+    constexpr ZfPos ZF_THEKA  = { 1778.01f, 859.67f, 8.88f };
+    constexpr ZfPos ZF_ZUMRAH = { 1912.17f, 1016.11f, 11.60f };
+    constexpr ZfPos ZF_UKORZ  = { 1727.48f, 1017.35f, 54.91f };
+
+    float ZfDist(ZfPos const& a, ZfPos const& b)
+    {
+        return std::sqrt((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y) + (a.z - b.z) * (a.z - b.z));
+    }
+
+    bool ZfKept(RoomAggroBoss const& r, ZfPos const& boss, ZfPos const& p, float safeRadius)
+    {
+        return RoomAggroRegistry::InRoomBand(r, p.y) &&
+               RoomAggroRegistry::IsRoomTrash(r, 5649, ZfDist(boss, p), safeRadius);
+    }
+}
+
+TEST(RoomAggroRegistryTest, ZulFarrakThekaDragsOutHisEscorts)
+{
+    namespace Z = DcZulFarrak;
+    RoomAggroBoss const* r = RoomAggroRegistry::Find(Z::MAP_ID, Z::NPC_THEKA);
+    ASSERT_NE(r, nullptr);
+    EXPECT_FLOAT_EQ(r->radius, Z::THEKA_ROOM_RADIUS);
+    EXPECT_FLOAT_EQ(r->pullOutRadius, Z::THEKA_ROOM_PULLOUT);
+    EXPECT_TRUE(r->memberEntries.empty());
+    // The three escorts at their spawns, and the nearest point of the Blood
+    // Drinker's patrol (814570 point 1, 3.0yd), are all dragged out.
+    for (ZfPos const& p : { ZfPos{ 1777.2f, 863.0f, 8.9f }, ZfPos{ 1777.1f, 865.3f, 8.9f },
+                            ZfPos{ 1767.0f, 855.0f, 8.9f } })
+        EXPECT_TRUE(ZfKept(*r, ZF_THEKA, p, r->pullOutRadius)) << p.x << ", " << p.y;
+    EXPECT_LT(r->pullOutRadius, 3.0f);
+    // The ledge Witch Doctor 81468 (46yd, wander 5) stays out.
+    EXPECT_GT(ZfDist(ZF_THEKA, { 1776.9f, 813.7f, 23.2f }) - 5.0f, r->radius);
+}
+
+TEST(RoomAggroRegistryTest, ZulFarrakZumrahClearsTheBowlPatrols)
+{
+    namespace Z = DcZulFarrak;
+    RoomAggroBoss const* r = RoomAggroRegistry::Find(Z::MAP_ID, Z::NPC_ZUMRAH);
+    ASSERT_NE(r, nullptr);
+    EXPECT_FLOAT_EQ(r->radius, Z::ZUMRAH_ROOM_RADIUS);
+    EXPECT_FLOAT_EQ(r->pullOutRadius, 0.0f);   // the computed sphere (~28yd) is short of them
+    // The two patrols at their closest (815260 32.4yd, 815050 49.6yd).
+    EXPECT_TRUE(ZfKept(*r, ZF_ZUMRAH, { 1884.1f, 1000.0f, 8.9f }, 28.0f));
+    EXPECT_TRUE(ZfKept(*r, ZF_ZUMRAH, { 1874.0f, 984.4f, 8.9f }, 28.0f));
+}
+
+TEST(RoomAggroRegistryTest, ZulFarrakUkorzClearsTheMesaAndKeepsRuuzlu)
+{
+    namespace Z = DcZulFarrak;
+    RoomAggroBoss const* r = RoomAggroRegistry::Find(Z::MAP_ID, Z::NPC_UKORZ);
+    ASSERT_NE(r, nullptr);
+    EXPECT_FLOAT_EQ(r->radius, Z::UKORZ_ROOM_RADIUS);
+    EXPECT_FLOAT_EQ(r->pullOutRadius, Z::UKORZ_ROOM_PULLOUT);
+    // Ruuzlu comes with him (he is no roster boss, so only the pull-out keeps him).
+    EXPECT_FALSE(ZfKept(*r, ZF_UKORZ, { 1730.28f, 1015.17f, 54.91f }, r->pullOutRadius));
+    // The four Guardians (one formation, wander 1) and the two Abominations
+    // (wander 5), at both ends of their wander.
+    struct S { ZfPos p; float wander; };
+    for (S const& s : { S{ { 1718.6f, 1056.3f, 53.5f }, 1.0f }, S{ { 1725.0f, 1058.7f, 54.1f }, 1.0f },
+                        S{ { 1762.9f, 1014.2f, 53.5f }, 1.0f }, S{ { 1767.9f, 1024.0f, 53.8f }, 1.0f },
+                        S{ { 1769.0f, 1043.2f, 50.6f }, 5.0f }, S{ { 1744.9f, 1066.6f, 51.2f }, 5.0f } })
+    {
+        float const d = ZfDist(ZF_UKORZ, s.p);
+        EXPECT_TRUE(RoomAggroRegistry::IsRoomTrash(*r, 7268, d - s.wander, r->pullOutRadius)) << s.p.x;
+        EXPECT_TRUE(RoomAggroRegistry::IsRoomTrash(*r, 7268, d + s.wander, r->pullOutRadius)) << s.p.x;
+    }
+}

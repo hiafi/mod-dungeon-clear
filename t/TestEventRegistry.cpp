@@ -1595,6 +1595,10 @@ TEST(DungeonEventIntegrityTest, EveryAuthoredObjectiveHookIdIsRegistered)
         { 13, "Azjol-Nerub — HadronoxHasWebbedTheDoors" },
         { 38, "The Oculus — OcDriveAscent (OculusDriver.cpp)" },
         { 39, "The Oculus — OcEregosHold (OculusDriver.cpp)" },
+        { 67, "Zul'Farrak: AltarReady (ZulFarrakEvents.cpp)" },
+        { 68, "Zul'Farrak: AltarRearm (ZulFarrakEvents.cpp)" },
+        { 69, "Zul'Farrak: WakeAntusul (ZulFarrakEvents.cpp)" },
+        { 70, "Zul'Farrak: PoolReady (ZulFarrakEvents.cpp)" },
     };
 
     for (Expected const& e : kHooks)

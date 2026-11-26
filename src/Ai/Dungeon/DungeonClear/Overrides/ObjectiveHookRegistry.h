@@ -113,6 +113,11 @@ void RegisterBlackrockDepthsHooks(ObjectiveHookRegistry::HookTable& out);
 // (and the mod-individual-progression layering) they read.
 void RegisterBlackrockSpireHooks(ObjectiveHookRegistry::HookTable& out);
 
+// Zul'Farrak (map 209), the rework: the Altar's two gates (67, 68), Antu'sul's
+// wake (69) and the pool (70). They live beside the events in
+// ZulFarrakEvents.cpp; the stock WakeZumrah (5) stays in this registry's TU.
+void RegisterZulFarrakHooks(ObjectiveHookRegistry::HookTable& out);
+
 // Blackfathom Deeps (map 48) — the Forgotten Pool exit (id 63). Lives beside
 // the events in BlackfathomDeepsEvents.cpp, which owns the pool geometry.
 void RegisterBlackfathomDeepsHooks(ObjectiveHookRegistry::HookTable& out);

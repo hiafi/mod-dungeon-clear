@@ -91,7 +91,7 @@ namespace DcTestDungeonRegistry
         // 80. Classic dungeons have none in the stock game and stay 0, so this
         // stays a trailing member — those rows need no edit (value-initialized).
         // A classic dungeon whose rework ships a heroic difficulty carries 60
-        // once its bot clear is offered (Ragefire Chasm).
+        // once its bot clear is offered (Ragefire Chasm, Zul'Farrak).
         std::uint32_t heroicLevel = 0;
 
         // --- SCENARIO fields (Karazhan chess plan, T1) ---------------------

@@ -105,66 +105,14 @@ TEST(BossRosterRegistryTest, UldamanAltarObjectivesSortBeforeArchaedas)
     EXPECT_EQ(out[archaedasIdx].encounterIndex, 7u);
 }
 
-// ZulFarrak: the Temple Summit event objective (orderOverride 4) MUST sort (and
-// thus be reached) before Chief Ukorz (orderOverride 5) so the door-opening
-// event runs first.
-TEST(BossRosterRegistryTest, ZfSummitObjectiveSortsBeforeUkorz)
-{
-    std::vector<DungeonBossInfo> base = {
-        Boss(7795, 0, "Hydromancer Velratha", 209),
-        Boss(7267, 7, "Chief Ukorz Sandscalp", 209),
-    };
-    std::vector<DungeonBossInfo> out = BossRosterRegistry::Apply(209, DcDiffKey::Dungeon(DUNGEON_DIFFICULTY_NORMAL), base);
-
-    int objIdx = -1, ukorzIdx = -1;
-    for (int i = 0; i < (int)out.size(); ++i)
-    {
-        // The summit objective shares bit 7 with Ukorz; the Gahz'rilla objective
-        // sits at bit 8, so key off the index to pick the summit one.
-        if (out[i].kind == DungeonAnchorKind::Objective && out[i].encounterIndex == 7u)
-            objIdx = i;
-        if (out[i].entry == 7267)
-            ukorzIdx = i;
-    }
-    ASSERT_GE(objIdx, 0) << "summit objective missing";
-    ASSERT_GE(ukorzIdx, 0);
-    EXPECT_LT(objIdx, ukorzIdx) << "objective must precede Ukorz despite equal bit";
-    EXPECT_EQ(out[objIdx].encounterIndex, 7u);
-}
-
-// ZulFarrak: the optional Gahz'rilla gong objective (orderOverride 7) MUST sort
-// AFTER Chief Ukorz (orderOverride 5) AND after Hydromancer Velratha (6) so the
-// strictly-ordinal picker only routes the tank to the sacred pool once every
-// real boss is dead — the "very last" stop.
-TEST(BossRosterRegistryTest, ZfGahzrillaObjectiveSortsAfterUkorz)
-{
-    std::vector<DungeonBossInfo> base = {
-        Boss(7795, 0, "Hydromancer Velratha", 209),
-        Boss(7267, 7, "Chief Ukorz Sandscalp", 209),
-    };
-    std::vector<DungeonBossInfo> out = BossRosterRegistry::Apply(209, DcDiffKey::Dungeon(DUNGEON_DIFFICULTY_NORMAL), base);
-
-    int gahzIdx = -1, ukorzIdx = -1;
-    for (int i = 0; i < (int)out.size(); ++i)
-    {
-        if (out[i].kind == DungeonAnchorKind::Objective && out[i].encounterIndex == 8u)
-            gahzIdx = i;
-        if (out[i].entry == 7267)
-            ukorzIdx = i;
-    }
-    ASSERT_GE(gahzIdx, 0) << "Gahz'rilla objective missing";
-    ASSERT_GE(ukorzIdx, 0);
-    EXPECT_GT(gahzIdx, ukorzIdx) << "Gahz'rilla must come after Ukorz (ordered last)";
-    EXPECT_EQ(out[gahzIdx].eventId, 2u);
-}
-
-// ZulFarrak FULL clear order: the DBC bits (Velratha 0, Antu'sul 2, Theka 3,
-// Zum'rah 4, Ukorz 7) do not match the travel path. The `reorder` patch stamps
-// orderOverride 1..6 on the five real bosses (kill-bits untouched) and slots the
-// two objectives in at 4 and 7, yielding:
-//   Theka -> Antu'sul -> Zum'rah -> Temple Summit -> Ukorz -> Velratha -> Pool.
+// Zul'Farrak, the rework: the ruled order is Theka -> Antu'sul -> Zum'rah -> the
+// plaza -> the Pyramid -> the Altar -> the crew -> Ukorz -> Velratha -> the pool.
+// The DBC bits (Velratha 0, Antu'sul 2, Theka 3, Zum'rah 4, Ukorz 7) do not match
+// the path; the reorder stamps the ruled keys on the five real bosses (kill-bits
+// untouched) and the five objectives slot in between.
 TEST(BossRosterRegistryTest, ZfFullClearOrder)
 {
+    namespace Z = DcZulFarrak;
     // Auto-derived list as BossSpawnIndex emits it (DBC encounterIndex order).
     std::vector<DungeonBossInfo> base = {
         Boss(7795, 0, "Hydromancer Velratha", 209),
@@ -174,6 +122,7 @@ TEST(BossRosterRegistryTest, ZfFullClearOrder)
         Boss(7267, 7, "Chief Ukorz Sandscalp", 209),
     };
     std::vector<DungeonBossInfo> out = BossRosterRegistry::Apply(209, DcDiffKey::Dungeon(DUNGEON_DIFFICULTY_NORMAL), base);
+    ASSERT_EQ(out.size(), 10u);
 
     auto pos = [&](uint32 entry)
     {
@@ -182,29 +131,74 @@ TEST(BossRosterRegistryTest, ZfFullClearOrder)
                 return i;
         return -1;
     };
-    int summitPos = -1, poolPos = -1;
-    for (int i = 0; i < (int)out.size(); ++i)
-        if (out[i].kind == DungeonAnchorKind::Objective)
-        {
-            if (out[i].eventId == 1u) summitPos = i;
-            if (out[i].eventId == 2u) poolPos = i;
-        }
-    ASSERT_GE(summitPos, 0) << "Temple Summit objective missing";
-    ASSERT_GE(poolPos, 0) << "Sacred Pool objective missing";
+    auto objPos = [&](uint32 eventId)
+    {
+        for (int i = 0; i < (int)out.size(); ++i)
+            if (out[i].kind == DungeonAnchorKind::Objective && out[i].eventId == eventId)
+                return i;
+        return -1;
+    };
+    int const plaza = objPos(Z::EVENT_PLAZA);
+    int const pyramid = objPos(Z::EVENT_PYRAMID);
+    int const altar = objPos(Z::EVENT_ALTAR);
+    int const crew = objPos(Z::EVENT_CREW);
+    int const pool = objPos(Z::EVENT_POOL);
+    ASSERT_GE(plaza, 0);
+    ASSERT_GE(pyramid, 0);
+    ASSERT_GE(altar, 0);
+    ASSERT_GE(crew, 0);
+    ASSERT_GE(pool, 0);
 
-    // Theka -> Antu'sul -> Zum'rah -> Temple Summit -> Ukorz -> Velratha -> Pool.
-    EXPECT_LT(pos(7272), pos(8127));
-    EXPECT_LT(pos(8127), pos(7271));
-    EXPECT_LT(pos(7271), summitPos);
-    EXPECT_LT(summitPos, pos(7267));
-    EXPECT_LT(pos(7267), pos(7795));
-    EXPECT_LT(pos(7795), poolPos);
+    std::vector<int> const order = { pos(7272), pos(8127), pos(7271), plaza, pyramid, altar,
+                                     crew,      pos(7267), pos(7795), pool };
+    for (std::size_t i = 0; i + 1 < order.size(); ++i)
+        EXPECT_LT(order[i], order[i + 1]) << "step " << i;
 
     // Reordering must NOT disturb the real DBC kill-bits.
     EXPECT_EQ(Find(out, 7795)->encounterIndex, 0u);  // Velratha
     EXPECT_EQ(Find(out, 7267)->encounterIndex, 7u);  // Ukorz
-    EXPECT_EQ(BossOrderKey(*Find(out, 7795)), 6u);
-    EXPECT_EQ(BossOrderKey(*Find(out, 7267)), 5u);
+    EXPECT_EQ(BossOrderKey(*Find(out, 7267)), 8u);
+    EXPECT_EQ(BossOrderKey(*Find(out, 7795)), 9u);
+}
+
+// Each objective names what finishes it in the instance, so a reloaded or
+// re-entered instance never replays a won stage: the plaza, the top and the Altar
+// on the Pyramid slot (5), the crew on the End Door reading blown (its data id 2,
+// value 3, saved; the crew is done by then), the pool on Gahz'rilla's slot (1).
+TEST(BossRosterRegistryTest, ZfObjectivesFinishOnTheInstanceState)
+{
+    namespace Z = DcZulFarrak;
+    std::vector<DungeonBossInfo> base = { Boss(7267, 7, "Chief Ukorz Sandscalp", 209) };
+    std::vector<DungeonBossInfo> out =
+        BossRosterRegistry::Apply(209, DcDiffKey::Dungeon(DUNGEON_DIFFICULTY_NORMAL), base);
+    int seen = 0;
+    for (DungeonBossInfo const& o : out)
+    {
+        if (o.kind != DungeonAnchorKind::Objective)
+            continue;
+        ++seen;
+        if (o.eventId == Z::EVENT_PLAZA || o.eventId == Z::EVENT_PYRAMID || o.eventId == Z::EVENT_ALTAR)
+        {
+            EXPECT_EQ(o.doneBossStateIndex, 5) << o.name;
+            EXPECT_EQ(o.doneInstanceDataId, -1) << o.name;
+        }
+        else if (o.eventId == Z::EVENT_CREW)
+        {
+            EXPECT_EQ(o.doneBossStateIndex, -1);
+            EXPECT_EQ(o.doneInstanceDataId, 2);
+            EXPECT_EQ(o.doneInstanceDataValue, 3u);
+        }
+        else if (o.eventId == Z::EVENT_POOL)
+        {
+            EXPECT_EQ(o.doneBossStateIndex, 1);
+            EXPECT_NEAR(o.x, 1650.91f, 0.01f);  // on the gong
+        }
+        else
+        {
+            EXPECT_TRUE(false) << "unexpected objective " << o.name;
+        }
+    }
+    EXPECT_EQ(seen, 5);
 }
 
 // Hellfire Ramparts (543): the auto-derived list ends at Omor because the final
