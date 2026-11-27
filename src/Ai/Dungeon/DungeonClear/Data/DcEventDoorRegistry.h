@@ -445,6 +445,17 @@ namespace DcEventDoorRegistry
             // click would skip the crew. Navigation-ignored too (below).
             case 146084:  // Zul'Farrak: End Door (the crew fight's end)
                 return true;
+            // Gnomeregan (90), the rework: the Workshop Door (90858, guid 12003),
+            // the only way between the Train Depot side and the rest. Keyless in
+            // the rework (lock 92 and the LOCKED flag cleared), so only this list
+            // keeps the generic rung off it: the instance owns its three states
+            // (sealed and not selectable until Electrocutioner dies, unlocked
+            // after, open once the Alert System dies or a player opens it). The
+            // full clear's door event (GnomereganEvents, event 2) is its one click,
+            // from the inside, once it reads unlocked; section 2 waits for the
+            // Alert System's death. Navigation-ignored too (below).
+            case 90858:   // Gnomeregan: Workshop Door (the instance's)
+                return true;
             default:
                 return false;
         }
@@ -501,6 +512,22 @@ namespace DcEventDoorRegistry
             // door-type GOs are the five Troll Cages on the Pyramid's top, 150yd
             // away, which the Pyramid event opens with a UseGO.
             case 146084:  // Zul'Farrak: End Door (the crew fight's end)
+                return true;
+            // Gnomeregan (90), the rework. The navmesh knows no objects and
+            // routes through both doors shut (NAVMESH-REPORT).
+            //   * The Workshop Door (90858): nothing generic may open it
+            //     (IsScriptOnly above), so flagging it would only pause the run.
+            //     The clear never routes through it shut: section 1 never needs
+            //     it; section 2 meets it only after the Alert System's death has
+            //     opened it; the full clear's door objective, sorted before the
+            //     Alert System, opens it from the inside and finishes only on the
+            //     instance reading it open. The cluster is the door alone: no
+            //     other door GO stands within 100yd of it.
+            //   * The Final Chamber (142207), Thermaplugg's south door, 93yd of
+            //     walking from him: the instance holds it open from the load on
+            //     (section 7 #17 A), so a shut state is never the run's to solve.
+            case 90858:   // Gnomeregan: Workshop Door (the instance's)
+            case 142207:  // Gnomeregan: The Final Chamber (held open)
                 return true;
             // Blackrock Depths — the Black Vault's other shut door GOs. With the
             // Dark Coffer ignored, the blocking-door value flagged the next shut

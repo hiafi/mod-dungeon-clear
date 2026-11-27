@@ -40,6 +40,7 @@ namespace
             RegisterSunkenTempleRoster(t);
             RegisterRazorfenDownsRoster(t);
             RegisterZulFarrakRoster(t);
+            RegisterGnomereganRoster(t);
             RegisterBlackrockDepthsRoster(t);
             RegisterBlackrockSpireRoster(t);
             RegisterBlackwingLairRoster(t);

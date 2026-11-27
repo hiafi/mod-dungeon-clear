@@ -577,6 +577,7 @@ namespace
             RegisterRazorfenDownsEvents(t);
             RegisterSunkenTempleEvents(t);
             RegisterZulFarrakEvents(t);
+            RegisterGnomereganEvents(t);
             RegisterBlackrockDepthsEvents(t);
             RegisterBlackrockSpireEvents(t);
             RegisterDeadminesEvents(t);

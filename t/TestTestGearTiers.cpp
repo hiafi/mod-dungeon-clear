@@ -53,7 +53,8 @@ TEST(DcTestGearTiersTest, EveryRegistryRowIsClassified)
             // Classic heroics are the reworks' own; each is a decision.
             if (exp == Expansion::Classic)
             {
-                EXPECT_TRUE(row.mapId == 389u || row.mapId == 209u) << row.token;  // Ragefire Chasm, Zul'Farrak
+                // Ragefire Chasm, Zul'Farrak, Gnomeregan
+                EXPECT_TRUE(row.mapId == 389u || row.mapId == 209u || row.mapId == 90u) << row.token;
             }
         }
         EXPECT_LE(row.recommendedLevel, cap) << row.token;
@@ -128,6 +129,11 @@ TEST(DcTestGearTiersTest, EndgameLadderIsTheDocumentedTiers)
     EXPECT_TRUE(HasIlvl(zfHeroic, 65));
     EXPECT_TRUE(HasIlvl(zfHeroic, 92));
     EXPECT_FALSE(HasIlvl(zfHeroic, 120));
+
+    std::vector<Choice> const gnomerHeroic = Ladder(90, 60);  // Gnomeregan heroic
+    EXPECT_TRUE(HasIlvl(gnomerHeroic, 65));
+    EXPECT_TRUE(HasIlvl(gnomerHeroic, 92));
+    EXPECT_FALSE(HasIlvl(gnomerHeroic, 120));
 
     std::vector<Choice> const wotlk = Ladder(668, 80);  // Halls of Reflection
     EXPECT_TRUE(HasIlvl(wotlk, 200));

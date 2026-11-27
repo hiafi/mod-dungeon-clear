@@ -101,6 +101,9 @@ namespace
     std::vector<Spot> const Spire{{78.5083f, -225.044f, 49.839f, 0.0f}, {98.25f, -300.75f, 63.1f, 25.0f}};
     std::vector<Spot> const Depths{{456.929f, 34.0923f, -68.0896f, 0.0f}, {544.0f, -181.3f, -36.0f, 12.0f},
                                    {607.2f, -47.8f, -59.8f, 25.0f}, {843.8f, -167.8f, -49.7f, 25.0f}};
+    // Gnomeregan: the entrance (area trigger 324's landing) and the Train Depot,
+    // reached only (25yd), both at the first checkpoint order (S0's CP draft).
+    std::vector<Spot> const Gnomeregan{{-329.098f, -3.207f, -152.851f, 0.0f}, {-736.51f, 2.71f, -249.99f, 25.0f}};
     std::vector<Spot> const Monastery{{1688.99f, 1053.48f, 18.6775f, 0.0f}, {255.35f, -209.09f, 18.68f, 0.0f},
                                       {1610.83f, -323.43f, 18.67f, 0.0f}, {855.68f, 1321.50f, 18.67f, 0.0f},
                                       {204.0f, -430.0f, 19.3f, 15.0f}};
@@ -138,6 +141,25 @@ TEST(DcReleaseDecisionTest, AWingRunOnAReachedSpotIsItsOwn)
     EXPECT_TRUE(RevivesInRegion(Depths, brdS2, {600.0f, -200.0f, -50.0f}));
     // ...but a death nearer to the other section's always usable entrance refuses.
     EXPECT_FALSE(RevivesInRegion(Depths, brdS2, {460.0f, 20.0f, -68.0f}));
+}
+
+// Section 2 starts on the Depot (its own spot, reached at the teleport); a death
+// anywhere on its way revives nearer the Depot than the entrance, Thermaplugg's
+// room included. Section 1 and the full clear start on the entrance; the Depot
+// is never theirs (reached only, never walked to), and never foreign either.
+TEST(DcReleaseDecisionTest, GnomereganSectionsReleaseOnTheirOwnStarts)
+{
+    Point const entrance{-329.10f, -3.21f, -152.85f};
+    Point const depot{-736.51f, 2.71f, -249.99f};
+    EXPECT_TRUE(HasOwnSpot(Gnomeregan, entrance));
+    EXPECT_TRUE(HasOwnSpot(Gnomeregan, depot));
+    for (Point const& death : { Point{-756.7f, 224.6f, -273.1f}, Point{-887.5f, 364.2f, -272.6f},
+                                Point{-531.3f, 670.2f, -325.2f} })   // the hall, the pocket, Thermaplugg
+    {
+        EXPECT_TRUE(RevivesInRegion(Gnomeregan, depot, death)) << death.x;
+        EXPECT_TRUE(RevivesInRegion(Gnomeregan, entrance, death)) << death.x;
+    }
+    EXPECT_TRUE(RevivesInRegion(Gnomeregan, entrance, {-552.0f, 502.9f, -216.7f}));   // Electrocutioner
 }
 
 TEST(DcReleaseDecisionTest, MonasteryWingsKeepApart)

@@ -10,6 +10,7 @@
 
 #include "Ai/Dungeon/DungeonClear/Data/DcEventDoorRegistry.h"
 #include "Ai/Dungeon/DungeonClear/Data/DungeonEventRegistry.h"
+#include "Ai/Dungeon/DungeonClear/Data/FightInPlaceRegistry.h"
 #include "Ai/Dungeon/DungeonClear/Data/Events/DungeonEventTables.h"
 #include "Ai/Dungeon/DungeonClear/Overrides/BossRosterRegistry.h"
 #include "Ai/Dungeon/DungeonClear/Overrides/ObjectiveHookRegistry.h"
@@ -329,6 +330,7 @@ TEST(DungeonEventRegistryTest, FindAndHasEvents)
 
     EXPECT_TRUE(DungeonEventRegistry::HasEvents(109));
     EXPECT_TRUE(DungeonEventRegistry::HasEvents(209));
+    EXPECT_TRUE(DungeonEventRegistry::HasEvents(90));   // Gnomeregan
     EXPECT_FALSE(DungeonEventRegistry::HasEvents(34));  // Stockades — none
 }
 
@@ -705,6 +707,129 @@ TEST(DungeonEventRegistryTest, ZulFarrakEndDoorIsScriptOnlyAndNavigationIgnored)
         EXPECT_FALSE(DcEventDoorRegistry::IsScriptOnly(cage)) << cage;
         EXPECT_FALSE(DcEventDoorRegistry::IsNavigationIgnored(cage)) << cage;
     }
+}
+
+// --- Gnomeregan (90), the rework (GnomereganEvents.cpp) ---------------------
+
+// Two events: the room pre-clear gate and the full clear's Workshop Door. The door
+// event holds on the door's inside until the instance reads it unlocked, clicks it
+// (unless it already reads open), then waits for the engine's open state. It is
+// the only step anywhere on the map that names an object.
+TEST(DungeonEventGnomeregan, TheRoomGateAndTheWorkshopDoorFromTheInside)
+{
+    namespace G = DcGnomeregan;
+    std::size_t count = 0;
+    for (DungeonEvent const& e : DungeonEventRegistry::AllEvents())
+        if (e.mapId == G::MAP_ID)
+            ++count;
+    EXPECT_EQ(count, 2u);
+
+    DungeonEvent const* room = DungeonEventRegistry::Find(G::MAP_ID, G::EVENT_ROOM_AGGRO);
+    ASSERT_NE(room, nullptr);
+    EXPECT_TRUE(DungeonEventRegistry::IsRoomAggroPreClear(*room));
+    EXPECT_TRUE(DungeonEventRegistry::HasRoomAggroEvent(G::MAP_ID));
+
+    DungeonEvent const* e = DungeonEventRegistry::Find(G::MAP_ID, G::EVENT_WORKSHOP_DOOR);
+    ASSERT_NE(e, nullptr);
+    EXPECT_EQ(e->activation, EventActivation::Anchored);
+    EXPECT_EQ(e->orderIndex, static_cast<uint32>(G::ORDER_ALERT));
+    EXPECT_TRUE(e->required);
+    EXPECT_TRUE(e->persistent);   // a combat gap at the door never rewinds the click
+    EXPECT_EQ(e->gate, DcDifficultyGate::Any);
+    ASSERT_EQ(e->steps.size(), 3u);
+
+    EventStep const& hold = e->steps[0];
+    EXPECT_EQ(hold.kind, EventStepKind::MoveTo);
+    EXPECT_EQ(hold.instanceDataId, 10);   // DATA_WORKSHOP_DOOR
+    EXPECT_EQ(hold.instanceDataMin, 1u);  // unlocked: Electrocutioner is dead
+    EXPECT_NEAR(hold.x, -762.8f, 0.01f);
+    EXPECT_NEAR(hold.y, 269.2f, 0.01f);
+    // On the inside (the main side, y > the door's 260.4) within the click's reach.
+    float const standToDoor = std::hypot(hold.x - G::DOOR_X, hold.y - G::DOOR_Y);
+    EXPECT_GT(hold.y - hold.radius, G::DOOR_Y);
+    EXPECT_LT(standToDoor + hold.radius, G::DOOR_SEARCH);
+
+    EventStep const& click = e->steps[1];
+    EXPECT_EQ(click.kind, EventStepKind::UseGameObject);
+    EXPECT_EQ(click.goEntry, 90858u);
+    EXPECT_EQ(click.skipIfDataId, 10);
+    EXPECT_EQ(click.skipIfDataValue, 2u);  // already open: no click
+
+    EventStep const& wait = e->steps[2];
+    EXPECT_EQ(wait.kind, EventStepKind::WaitForGameObjectState);
+    EXPECT_EQ(wait.goEntry, 90858u);
+    EXPECT_EQ(wait.wantState, 0u);         // GO_STATE_ACTIVE
+    EXPECT_GT(wait.timeoutMs, 0u);
+}
+
+// The Workshop Door is the instance's: never the generic rung's to click, never a
+// reason to park (the mesh routes through it shut). The Final Chamber is held open
+// by the instance, so it is navigation-ignored only. The Cave Ins stay ordinary
+// doors (shut scenery off every route).
+TEST(DungeonEventGnomeregan, DoorRules)
+{
+    namespace G = DcGnomeregan;
+    EXPECT_TRUE(DcEventDoorRegistry::IsScriptOnly(G::GO_WORKSHOP_DOOR));
+    EXPECT_TRUE(DcEventDoorRegistry::IsNavigationIgnored(G::GO_WORKSHOP_DOOR));
+    EXPECT_TRUE(DcEventDoorRegistry::IsNavigationIgnored(G::GO_FINAL_CHAMBER));
+    EXPECT_FALSE(DcEventDoorRegistry::IsScriptOnly(G::GO_FINAL_CHAMBER));
+    EXPECT_FALSE(DcEventDoorRegistry::IsKeyExempt(G::GO_WORKSHOP_DOOR));   // keyless in the rework
+    for (uint32 go : { G::GO_CAVE_IN_1, G::GO_CAVE_IN_2 })
+    {
+        EXPECT_FALSE(DcEventDoorRegistry::IsScriptOnly(go)) << go;
+        EXPECT_FALSE(DcEventDoorRegistry::IsNavigationIgnored(go)) << go;
+    }
+}
+
+// Never clicked: no event step names the console, a Punchograph, a Sparklematic,
+// a Gnome Face or a Button, and no door rule does either (none is a door).
+TEST(DungeonEventGnomeregan, NoObjectButTheWorkshopDoorIsEverClicked)
+{
+    namespace G = DcGnomeregan;
+    std::vector<uint32> never = { G::GO_CLEARANCE_CONSOLE, G::GO_PUNCHOGRAPH_A, G::GO_PUNCHOGRAPH_B,
+                                  G::GO_PUNCHOGRAPH_C,     G::GO_PUNCHOGRAPH_D, G::GO_SPARKLEMATIC_1,
+                                  G::GO_SPARKLEMATIC_2,    G::GO_SPARKLEMATIC_3, G::GO_PUMMELER_CHEST,
+                                  G::GO_PUMMELER_CHEST_HEROIC };
+    for (uint32 go = G::GO_GNOME_FACE_FIRST; go <= G::GO_BUTTON_LAST; ++go)
+        never.push_back(go);
+    EXPECT_EQ(G::GO_GNOME_FACE_LAST + 1, G::GO_BUTTON_FIRST);
+    for (DungeonEvent const& e : DungeonEventRegistry::AllEvents())
+    {
+        if (e.mapId != G::MAP_ID)
+            continue;
+        for (EventStep const& step : e.steps)
+        {
+            EXPECT_TRUE(step.goEntry == 0 || step.goEntry == G::GO_WORKSHOP_DOOR) << e.id << " " << step.goEntry;
+            EXPECT_NE(step.creatureEntry, G::NPC_KERNOBEE) << e.id;   // his escort is a human's
+            EXPECT_NE(step.kind, EventStepKind::Gossip) << e.id;
+        }
+    }
+    for (uint32 go : never)
+    {
+        EXPECT_FALSE(DcEventDoorRegistry::IsNavigationIgnored(go)) << go;
+        EXPECT_FALSE(DcEventDoorRegistry::IsScriptOnly(go)) << go;
+        EXPECT_FALSE(DcEventDoorRegistry::IsKeyExempt(go)) << go;
+    }
+}
+
+// Crowd Pummeler in the glass: his pocket is a fight-in-place room (no ranged tag,
+// no drag-to-camp: a pull from outside the pocket box makes him evade), his own
+// origin included. The corridors the party arrives by stay ordinary.
+TEST(DungeonEventGnomeregan, PummelersPocketIsFoughtInPlace)
+{
+    namespace G = DcGnomeregan;
+    EXPECT_TRUE(FightInPlaceRegistry::IsNoPullZone(G::MAP_ID, G::PUMMELER_X, G::PUMMELER_Y));
+    EXPECT_TRUE(FightInPlaceRegistry::IsNoPullZone(G::MAP_ID, G::PUMMELER_FIGHT_X, G::PUMMELER_FIGHT_Y));
+    EXPECT_TRUE(FightInPlaceRegistry::IsNoPullZone(G::MAP_ID, -898.8f, 359.8f));   // the pocket's free disc
+    EXPECT_TRUE(FightInPlaceRegistry::IsNoPullZone(G::MAP_ID, -893.0f, 384.0f));   // the west tip
+    // Outside: the y 280 corridor from the hall (the stopped Frostwalker 30305),
+    // the east tip's approach (-903, 326), the junction and the hall.
+    EXPECT_FALSE(FightInPlaceRegistry::IsNoPullZone(G::MAP_ID, -795.2f, 283.4f));
+    EXPECT_FALSE(FightInPlaceRegistry::IsNoPullZone(G::MAP_ID, -903.0f, 326.0f));
+    EXPECT_FALSE(FightInPlaceRegistry::IsNoPullZone(G::MAP_ID, -761.0f, 406.0f));
+    EXPECT_FALSE(FightInPlaceRegistry::IsNoPullZone(G::MAP_ID, -756.67f, 224.55f));
+    // Another map at the same coordinates is never vetoed.
+    EXPECT_FALSE(FightInPlaceRegistry::IsNoPullZone(91, G::PUMMELER_FIGHT_X, G::PUMMELER_FIGHT_Y));
 }
 
 // Blackrock Depths Ring of Law (map 230): a PERSISTENT anchored event that walks

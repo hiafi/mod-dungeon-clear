@@ -61,6 +61,7 @@ bool DcRoomAggroPreClearCondition(Player* bot, AiObjectContext* context);
 // --- event rows (one appender per dungeon) -------------------------------
 void RegisterSunkenTempleEvents(std::vector<DungeonEvent>& out);
 void RegisterZulFarrakEvents(std::vector<DungeonEvent>& out);
+void RegisterGnomereganEvents(std::vector<DungeonEvent>& out);
 void RegisterShadowfangKeepEvents(std::vector<DungeonEvent>& out);
 void RegisterScarletMonasteryEvents(std::vector<DungeonEvent>& out);
 void RegisterRagefireChasmEvents(std::vector<DungeonEvent>& out);
@@ -428,6 +429,225 @@ namespace DcZulFarrak
                                   bool memberInTrigger)
     {
         return antusulAlive && !antusulInCombat && !antusulEvading && memberInTrigger;
+    }
+}
+
+// Gnomeregan (map 90), the rework: the clear order, the two Finder sections, the
+// Workshop Door, Crowd Pummeler's window, the room pre-clears and the objects a bot
+// never clicks, shared with the gtests. The reasoning is in GnomereganEvents.cpp.
+// The instance contract is mod-dungeon-bosses' GnomereganRework.h (slots, data ids,
+// door states, sections, points): DC cannot include it, so the numbers it reads are
+// mirrored here and must move with it. Distances are measured from the live spawns
+// (SELECT 2026-11-26) and the build's navmesh report.
+namespace DcGnomeregan
+{
+    constexpr uint32 MAP_ID = 90;
+
+    // The six encounters' kill-credit creatures (instance_encounters after WP-H:
+    // 379 re-pointed from Grubbis to Techbot, 1107 new for the Alert System).
+    constexpr uint32 NPC_TECHBOT      = 301105;  // a copy of the outside Techbot 6231
+    constexpr uint32 NPC_FALLOUT      = 7079;    // Viscous Fallout
+    constexpr uint32 NPC_ELECTRO      = 6235;    // Electrocutioner 6000
+    constexpr uint32 NPC_ALERT_SYSTEM = 301110;  // the Mobile Alert System (a copy of 7849)
+    constexpr uint32 NPC_PUMMELER     = 6229;    // Crowd Pummeler 9-60
+    constexpr uint32 NPC_THERMAPLUGG  = 7800;    // Mekgineer Thermaplugg
+    // Stock units the rework leaves alone or cuts: never a roster boss.
+    constexpr uint32 NPC_GRUBBIS     = 7361;    // 379's old credit; no spawn (Emi's event is cut)
+    constexpr uint32 NPC_STOCK_ALERT = 7849;    // stock trash, five spawns (two in section 1's cave)
+    constexpr uint32 NPC_KERNOBEE    = 7850;    // the escort quest's gnome: his gossip is a human's
+    constexpr uint32 NPC_EXILE       = 301190;  // the End NPCs (normal, after Electrocutioner and Thermaplugg)
+
+    // DungeonEncounter bits = the rework instance's boss state slots. Slot 6 (the
+    // Whole Workshop's kill) has no DBC row: bots never arm the hard mode.
+    constexpr uint32 SLOT_ALERT_SYSTEM = 0;
+    constexpr uint32 SLOT_FALLOUT      = 1;
+    constexpr uint32 SLOT_TECHBOT      = 2;
+    constexpr uint32 SLOT_ELECTRO      = 3;
+    constexpr uint32 SLOT_PUMMELER     = 4;
+    constexpr uint32 SLOT_THERMAPLUGG  = 5;
+    constexpr uint32 SLOT_HARD_MODE    = 6;
+
+    // EncounterState (InstanceScript.h).
+    constexpr uint32 STATE_NOT_STARTED = 0;
+    constexpr uint32 STATE_IN_PROGRESS = 1;
+    constexpr uint32 STATE_FAIL        = 2;
+    constexpr uint32 STATE_DONE        = 3;
+
+    // Instance data (GnomereganRework.h GnomereganData).
+    constexpr uint32 DATA_WORKSHOP_DOOR = 10;  // the door states below (saved)
+    constexpr uint32 DATA_FINAL_CHAMBER = 11;  // 1: held open from the load on
+    constexpr uint32 DATA_SECTION       = 12;  // 0 none, 1 or 2: the first entering LFG group's section
+    // The Workshop Door's states: sealed (shut, not selectable) until
+    // Electrocutioner dies; unlocked (shut, clickable by anyone) after; open
+    // (latched, not selectable) once the Alert System dies or a player opens it
+    // while unlocked. Never drops back.
+    constexpr uint32 WORKSHOP_DOOR_SEALED   = 0;
+    constexpr uint32 WORKSHOP_DOOR_UNLOCKED = 1;
+    constexpr uint32 WORKSHOP_DOOR_OPEN     = 2;
+
+    // The Finder sections (WP-H's lfg rows): 14 / 321 end at Electrocutioner, 320
+    // / 322 start at the Train Depot and end at Thermaplugg. The masks are the
+    // sections' DungeonEncounter bits.
+    constexpr uint32 LFG_SECTION_1        = 14;
+    constexpr uint32 LFG_SECTION_1_HEROIC = 321;
+    constexpr uint32 LFG_SECTION_2        = 320;
+    constexpr uint32 LFG_SECTION_2_HEROIC = 322;
+    constexpr uint32 SECTION_1_ENCOUNTER_MASK = (1u << SLOT_FALLOUT) | (1u << SLOT_TECHBOT) | (1u << SLOT_ELECTRO);
+    constexpr uint32 SECTION_2_ENCOUNTER_MASK =
+        (1u << SLOT_ALERT_SYSTEM) | (1u << SLOT_PUMMELER) | (1u << SLOT_THERMAPLUGG);
+
+    // The section an LFG dungeon id runs: the instance's SectionOfLfgDungeon (0
+    // for none of Gnomeregan's).
+    constexpr uint32 SectionOfLfgDungeon(uint32 lfg)
+    {
+        if (lfg == LFG_SECTION_1 || lfg == LFG_SECTION_1_HEROIC)
+            return 1;
+        if (lfg == LFG_SECTION_2 || lfg == LFG_SECTION_2_HEROIC)
+            return 2;
+        return 0;
+    }
+
+    // Clear order (HANDOFF section 3.12): Techbot (his side room, 174yd off the
+    // path), Fallout, Electrocutioner; then the Workshop Door from the inside (the
+    // full clear's detour objective: it shares the Alert System's key, and an
+    // objective sorts before a boss at the same key), the Alert System, Pummeler,
+    // Thermaplugg.
+    constexpr int32 ORDER_TECHBOT     = 1;
+    constexpr int32 ORDER_FALLOUT     = 2;
+    constexpr int32 ORDER_ELECTRO     = 3;
+    constexpr int32 ORDER_ALERT       = 4;
+    constexpr int32 ORDER_PUMMELER    = 5;
+    constexpr int32 ORDER_THERMAPLUGG = 6;
+
+    // Events.
+    constexpr uint32 EVENT_ROOM_AGGRO    = 1;  // the room pre-clears (RoomAggroRegistry rows)
+    constexpr uint32 EVENT_WORKSHOP_DOOR = 2;  // the full clear opens the unlocked door from the inside
+
+    // Objective anchors, OBJ(n).
+    constexpr uint32 OBJ_WORKSHOP_DOOR = 1;
+
+    // Objects. The Workshop Door is the instance's (sealed / unlocked / open):
+    // only the full clear's door event clicks it, once it reads unlocked. The
+    // Final Chamber is held open by the instance from the load on.
+    constexpr uint32 GO_WORKSHOP_DOOR = 90858;   // guid 12003
+    constexpr uint32 GO_FINAL_CHAMBER = 142207;  // guid 6910
+    constexpr uint32 GO_CAVE_IN_1     = 146085;  // Techbot's room: shut scenery, off every route
+    constexpr uint32 GO_CAVE_IN_2     = 146086;
+    constexpr uint32 GO_STATE_ACTIVE  = 0;       // open
+    constexpr uint32 GO_STATE_READY   = 1;       // shut
+    // Never clicked (none is a door or a chest, so no generic rung touches them,
+    // and no event step names them): the Punchographs (the 3005-A copy inside and
+    // the stock B / C / D), the Sparklematics, the six Gnome Faces and their
+    // Buttons (D6's, not selectable), and the hard mode's Clearance Console (a
+    // human's choice, heroic only; its own check refuses bots).
+    constexpr uint32 GO_PUNCHOGRAPH_A     = 142345;
+    constexpr uint32 GO_PUNCHOGRAPH_B     = 142475;
+    constexpr uint32 GO_PUNCHOGRAPH_C     = 142476;
+    constexpr uint32 GO_PUNCHOGRAPH_D     = 142696;
+    constexpr uint32 GO_SPARKLEMATIC_1    = 142487;
+    constexpr uint32 GO_SPARKLEMATIC_2    = 175084;
+    constexpr uint32 GO_SPARKLEMATIC_3    = 175085;
+    constexpr uint32 GO_GNOME_FACE_FIRST  = 142208;  // 142208-142213
+    constexpr uint32 GO_GNOME_FACE_LAST   = 142213;
+    constexpr uint32 GO_BUTTON_FIRST      = 142214;  // 142214-142219
+    constexpr uint32 GO_BUTTON_LAST       = 142219;
+    constexpr uint32 GO_CLEARANCE_CONSOLE = 301382;
+    // Crowd Pummeler's chest (D5's templates), placed by the instance on the
+    // pocket floor at his death: ordinary loot, nothing DC must do.
+    constexpr uint32 GO_PUMMELER_CHEST        = 301380;
+    constexpr uint32 GO_PUMMELER_CHEST_HEROIC = 301381;
+
+    // The starts: section 1 and the full clear at area trigger 324's landing (the
+    // floor; Finder 14's start is 2yd above it), section 2 at area trigger 523's
+    // (Finder 320's start, the Train Depot).
+    constexpr float ENTRANCE_X = -329.10f;
+    constexpr float ENTRANCE_Y = -3.21f;
+    constexpr float ENTRANCE_Z = -152.85f;
+    constexpr float ENTRANCE_O = 2.967f;
+    constexpr float DEPOT_X = -736.51f;
+    constexpr float DEPOT_Y = 2.71f;
+    constexpr float DEPOT_Z = -249.99f;
+    constexpr float DEPOT_O = 3.140f;
+
+    // The Workshop Door (-758.54, 260.39, -273.05) and the stand on its inside
+    // (the main side, where the full clear comes from the junction (-761, 406)):
+    // the last raster point of the Electrocutioner to door walk, 9.8yd short of
+    // it (NAVMESH route.out). The corridor is 12yd wide; the hall lies beyond.
+    constexpr float DOOR_X = -758.54f;
+    constexpr float DOOR_Y = 260.39f;
+    constexpr float DOOR_Z = -273.05f;
+    constexpr float DOOR_INSIDE_X = -762.8f;
+    constexpr float DOOR_INSIDE_Y = 269.2f;
+    constexpr float DOOR_INSIDE_Z = -272.9f;
+    constexpr float DOOR_INSIDE_RADIUS = 5.0f;
+    constexpr float DOOR_SEARCH = 20.0f;
+
+    // Crowd Pummeler floats in the glass window (HANDOFF s10), 4.8yd under the
+    // pocket floor and 0.5yd behind its collision face: off the mesh, so his
+    // roster anchor is a pocket floor spot in front of the glass on the pocket's
+    // center line (D5's tank spot, 4.0yd from his origin, inside his 11.9yd floor
+    // reach). His spawn would snap a route to whichever floor the search found.
+    constexpr float PUMMELER_X = -883.5655f;
+    constexpr float PUMMELER_Y = 363.25467f;
+    constexpr float PUMMELER_Z = -277.38113f;
+    constexpr float PUMMELER_FIGHT_X = -887.5f;
+    constexpr float PUMMELER_FIGHT_Y = 364.2f;
+    constexpr float PUMMELER_FIGHT_Z = -272.6f;
+    // The pocket box (GnomereganRework.h kPocketBox*): a pull from outside it is
+    // refused (he evades at once) and damage from outside it is 0. The
+    // fight-in-place zone is the box widened to his origin (x -883.57), so the
+    // pull trigger never plans a ranged tag or a drag-to-camp on him: the tank
+    // walks in onto the floor and engages him where he floats.
+    constexpr float POCKET_MIN_X = -913.0f;
+    constexpr float POCKET_MAX_X = -884.0f;
+    constexpr float POCKET_MIN_Y = 342.0f;
+    constexpr float POCKET_MAX_Y = 391.0f;
+    constexpr float POCKET_MIN_Z = -276.0f;
+    constexpr float POCKET_MAX_Z = -262.0f;
+    constexpr float POCKET_ZONE_MAX_X = -880.0f;
+
+    // The Train Depot side (DcNavPenaltyRegistry, a cost 1 wing region): the
+    // landing and the walk down to y 150 (the hall starts at y 162). A party
+    // standing here with no run wing chosen (a walk-in by the Depot, a human `dc
+    // on` there) runs section 2: the door behind it is sealed, so the full
+    // clear's first boss could not be reached. Nothing of the main side lies in
+    // the box (every other room is at x > -560 or y > 280).
+    constexpr float DEPOT_REGION_MIN_X = -830.0f;
+    constexpr float DEPOT_REGION_MAX_X = -700.0f;
+    constexpr float DEPOT_REGION_MIN_Y = -40.0f;
+    constexpr float DEPOT_REGION_MAX_Y = 150.0f;
+    constexpr float DEPOT_REGION_MIN_Z = -280.0f;
+    constexpr float DEPOT_REGION_MAX_Z = -235.0f;
+
+    // Room pre-clears (RoomAggroRegistry). No boss calls or answers assistance
+    // (flags + NoAssist every tick); the rows clear what each fight runs into.
+    //   Viscous Fallout at area C (-391, 132, -209.1), his patrol dropped (S0).
+    //     His fight holds the cleared floor within about 30yd of C, and the
+    //     cave's units wander 5yd: every unit whose spawn is within 36yd (3D) of
+    //     C: Horror 30260 8.9yd, Slime 30146 17.5, Slime 30259 30.1, Slime 30263
+    //     31.7, Horror 30151 35.7. Slime 30267 (39.4) and Lurker 30264 (54.4)
+    //     stay out; Pillager 30227, 14yd off horizontally, stands 55yd up in the
+    //     second room. The Horror's closest is 3.9yd (8.9 less its wander), so
+    //     the pull-out sits under it and the room clear drags it out.
+    constexpr float FALLOUT_X = -391.0f;
+    constexpr float FALLOUT_Y = 132.0f;
+    constexpr float FALLOUT_Z = -209.1f;
+    constexpr float FALLOUT_ROOM_RADIUS  = 36.0f;
+    constexpr float FALLOUT_ROOM_PULLOUT = 3.5f;
+    //   Thermaplugg: the console pack on the room's south entrance, the way in
+    //     (5 Machinesmiths, wander 2, and 2 Guardians, wander 5; 59.9 to 63.4yd
+    //     from him, 10 to 14yd from the console). Nothing else within 97yd.
+    constexpr float THERMAPLUGG_X = -531.32f;
+    constexpr float THERMAPLUGG_Y = 670.16f;
+    constexpr float THERMAPLUGG_Z = -325.18f;
+    constexpr float THERMAPLUGG_ROOM_RADIUS = 70.0f;
+
+    // Whether a point is on the pocket floor box, where his pull is accepted
+    // (the instance's InPocketBox; t/TestBossRoster pins his anchor inside it).
+    constexpr bool InPocketBox(float x, float y, float z)
+    {
+        return x >= POCKET_MIN_X && x <= POCKET_MAX_X && y >= POCKET_MIN_Y && y <= POCKET_MAX_Y &&
+               z >= POCKET_MIN_Z && z <= POCKET_MAX_Z;
     }
 }
 
@@ -6536,6 +6756,7 @@ void RegisterScholomanceRoster(std::vector<BossRosterPatch>& t);
 void RegisterSunkenTempleRoster(std::vector<BossRosterPatch>& t);
 void RegisterRazorfenDownsRoster(std::vector<BossRosterPatch>& t);
 void RegisterZulFarrakRoster(std::vector<BossRosterPatch>& t);
+void RegisterGnomereganRoster(std::vector<BossRosterPatch>& t);
 void RegisterBlackrockDepthsRoster(std::vector<BossRosterPatch>& t);
 void RegisterBlackrockSpireRoster(std::vector<BossRosterPatch>& t);
 void RegisterBlackwingLairRoster(std::vector<BossRosterPatch>& t);
@@ -6645,6 +6866,9 @@ void RegisterBlackrockSpireWings(std::unordered_map<uint32, DungeonWingLayout>& 
 // Blackrock Depths (230) — the four Finder sections (brd-s1 to brd-s4), chosen
 // per run.
 void RegisterBlackrockDepthsWings(std::unordered_map<uint32, DungeonWingLayout>& store);
+// Gnomeregan (90): the two Finder sections (gnomer-s1, gnomer-s2) and the full
+// clear (gnomer, the default), chosen per run. Lives in GnomereganEvents.cpp.
+void RegisterGnomereganWings(std::unordered_map<uint32, DungeonWingLayout>& store);
 
 // --- anchor routes (one appender per dungeon that hand-authors a route) ---
 // Waypoint anchors StridedPathfinder walks INSTEAD of asking the navmesh

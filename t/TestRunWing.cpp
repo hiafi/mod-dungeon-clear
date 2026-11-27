@@ -191,7 +191,7 @@ TEST(DcRunWingTest, EveryIsolatedWingTokenHasACatalogueRowOnItsMap)
     // Rez recovery regroups a wiped party at the row whose token is the run's
     // wing token, and the test harness picks the run wing by the row's token —
     // so the two vocabularies must be one.
-    for (uint32 map : { 229u, 230u, 349u, 429u, 189u })
+    for (uint32 map : { 229u, 230u, 349u, 429u, 189u, 90u })
     {
         DungeonWingLayout const* layout = DungeonWingRegistry::Get(map);
         ASSERT_NE(layout, nullptr);
@@ -1226,4 +1226,224 @@ TEST(DcRunWingTest, ScarletMonasteryRegionsNameTheWingThePartyStandsIn)
     // Outside every wing (no such floor): the default wing.
     EXPECT_EQ(DcNavPenaltyRegistry::WingRegionAt(S::MAP_ID, 0.0f, 0.0f, 0.0f), nullptr);
     EXPECT_EQ(DcRunWing::ResolveFallback(Sm(), nullptr), "sm-gy");
+}
+
+// ---- Gnomeregan (map 90): two Finder sections and the full clear --------------
+
+namespace
+{
+    namespace G = DcGnomeregan;
+
+    // What BossSpawnIndex yields for 90 on the reworked server (WP-H's credits:
+    // 379 -> Techbot 301105, 1107 -> the Alert System 301110), in DBC-bit order,
+    // at the S0 spawns: Fallout at area C, Pummeler in the glass window.
+    std::vector<DungeonBossInfo> GnomerSpawnIndex()
+    {
+        return {
+            Boss(G::NPC_ALERT_SYSTEM, G::SLOT_ALERT_SYSTEM, -756.67f, 224.55f, -273.08f, G::MAP_ID),
+            Boss(G::NPC_FALLOUT,      G::SLOT_FALLOUT,      -391.0f,  132.0f,  -209.1f,  G::MAP_ID),
+            Boss(G::NPC_TECHBOT,      G::SLOT_TECHBOT,      -519.92f, -107.67f, -155.87f, G::MAP_ID),
+            Boss(G::NPC_ELECTRO,      G::SLOT_ELECTRO,      -552.05f, 502.90f, -216.73f, G::MAP_ID),
+            Boss(G::NPC_PUMMELER,     G::SLOT_PUMMELER,     G::PUMMELER_X, G::PUMMELER_Y, G::PUMMELER_Z, G::MAP_ID),
+            Boss(G::NPC_THERMAPLUGG,  G::SLOT_THERMAPLUGG,  -531.32f, 670.16f, -325.18f, G::MAP_ID),
+        };
+    }
+
+    std::vector<DungeonBossInfo> GnomerRoster()
+    {
+        return BossRosterRegistry::Apply(G::MAP_ID, DcDiffKey::Dungeon(DUNGEON_DIFFICULTY_NORMAL),
+                                         GnomerSpawnIndex());
+    }
+
+    DungeonWingLayout const& Gnomer()
+    {
+        DungeonWingLayout const* layout = DungeonWingRegistry::Get(G::MAP_ID);
+        EXPECT_NE(layout, nullptr);
+        return *layout;
+    }
+
+    std::vector<DungeonBossInfo> GnomerWing(char const* token)
+    {
+        DungeonWing const* wing = DungeonWingRegistry::FindWing(Gnomer(), token);
+        EXPECT_NE(wing, nullptr) << token;
+        return wing ? DcRunWing::FilterToWing(GnomerRoster(), *wing) : std::vector<DungeonBossInfo>{};
+    }
+
+    // The run order: the picker from a fresh start, each anchor finished as it
+    // is taken (a boss's bit set; an objective struck off, as its instance data
+    // would read done).
+    std::vector<uint32> GnomerOrder(std::vector<DungeonBossInfo> list)
+    {
+        std::vector<uint32> order;
+        uint32 sticky = 0;
+        uint32 stickyKey = 0;
+        bool haveSticky = false;
+        for (int guard = 0; guard < 16 && !list.empty(); ++guard)
+        {
+            std::optional<DungeonBossInfo> pick = DcBossOrdering::PickTarget(list, sticky, stickyKey, haveSticky);
+            if (!pick)
+                break;
+            order.push_back(pick->entry);
+            sticky = pick->entry;
+            stickyKey = BossOrderKey(*pick);
+            haveSticky = true;
+            list.erase(std::remove_if(list.begin(), list.end(),
+                                      [&](DungeonBossInfo const& b) { return b.entry == pick->entry; }),
+                       list.end());
+        }
+        return order;
+    }
+}
+
+TEST(DcRunWingTest, GnomereganIsAnExplicitSectionLayoutWithAWholeDungeonDefault)
+{
+    DungeonWingLayout const& layout = Gnomer();
+    EXPECT_TRUE(layout.isolated);
+    EXPECT_EQ(layout.select, WingSelect::Explicit);
+    EXPECT_EQ(layout.defaultWing, "gnomer");
+    ASSERT_EQ(layout.wings.size(), 3u);
+    EXPECT_EQ(layout.wings.back().token, "gnomer");   // last, so WingOf names the section
+
+    DungeonWing const* s1 = DungeonWingRegistry::FindWing(layout, "gnomer-s1");
+    DungeonWing const* s2 = DungeonWingRegistry::FindWing(layout, "gnomer-s2");
+    DungeonWing const* whole = DungeonWingRegistry::FindWing(layout, "gnomer");
+    ASSERT_NE(s1, nullptr);
+    ASSERT_NE(s2, nullptr);
+    ASSERT_NE(whole, nullptr);
+    EXPECT_EQ(s1->lfgDungeonId, 14u);
+    EXPECT_EQ(s1->lfgHeroicDungeonId, 321u);
+    EXPECT_EQ(s1->terminalBossEntry, G::NPC_ELECTRO);
+    EXPECT_EQ(s1->encounterMask, 0x0Eu);              // bits 1, 2, 3
+    EXPECT_EQ(s2->lfgDungeonId, 320u);
+    EXPECT_EQ(s2->lfgHeroicDungeonId, 322u);
+    EXPECT_EQ(s2->terminalBossEntry, G::NPC_THERMAPLUGG);
+    EXPECT_EQ(s2->encounterMask, 0x31u);              // bits 0, 4, 5
+    EXPECT_EQ(s1->encounterMask & s2->encounterMask, 0u);
+    EXPECT_EQ(s1->encounterMask | s2->encounterMask, 0x3Fu);   // the six encounters; slot 6 has no bit
+    EXPECT_EQ(whole->lfgDungeonId, 0u);
+    EXPECT_EQ(whole->terminalBossEntry, 0u);
+    EXPECT_EQ(whole->encounterMask, 0u);
+
+    // Labels name the section; the door objective is the full clear's alone.
+    EXPECT_EQ(DungeonWingRegistry::WingOf(G::MAP_ID, G::NPC_TECHBOT)->token, "gnomer-s1");
+    EXPECT_EQ(DungeonWingRegistry::WingOf(G::MAP_ID, G::NPC_ALERT_SYSTEM)->token, "gnomer-s2");
+    EXPECT_EQ(DungeonWingRegistry::WingOf(G::MAP_ID, DcRoster::OBJ(G::OBJ_WORKSHOP_DOOR))->token, "gnomer");
+    // The cut and the stock units are no wing's boss.
+    EXPECT_EQ(DungeonWingRegistry::WingOf(G::MAP_ID, G::NPC_GRUBBIS), nullptr);
+    EXPECT_EQ(DungeonWingRegistry::WingOf(G::MAP_ID, G::NPC_STOCK_ALERT), nullptr);
+}
+
+// The queue-fill latches the LFG dungeon's section, the same rule the instance
+// uses for DATA_SECTION (GnomereganRework.h SectionOfLfgDungeon).
+TEST(DcRunWingTest, GnomereganLfgDungeonPicksTheSection)
+{
+    for (uint32 lfg : { 14u, 321u, 320u, 322u })
+    {
+        DungeonWing const* wing = DungeonWingRegistry::WingForLfgDungeon(G::MAP_ID, lfg);
+        ASSERT_NE(wing, nullptr) << lfg;
+        EXPECT_EQ(wing->token, G::SectionOfLfgDungeon(lfg) == 1 ? "gnomer-s1" : "gnomer-s2") << lfg;
+    }
+    EXPECT_EQ(G::SectionOfLfgDungeon(14), 1u);
+    EXPECT_EQ(G::SectionOfLfgDungeon(321), 1u);
+    EXPECT_EQ(G::SectionOfLfgDungeon(320), 2u);
+    EXPECT_EQ(G::SectionOfLfgDungeon(322), 2u);
+    EXPECT_EQ(G::SectionOfLfgDungeon(0), 0u);
+    EXPECT_EQ(DungeonWingRegistry::WingForLfgDungeon(G::MAP_ID, 0), nullptr);
+    EXPECT_EQ(DungeonWingRegistry::WingForLfgDungeon(G::MAP_ID, 26), nullptr);   // Maraudon's
+}
+
+TEST(DcRunWingTest, GnomereganSectionOneRunsTechbotFalloutElectrocutioner)
+{
+    std::vector<uint32> const want = { G::NPC_TECHBOT, G::NPC_FALLOUT, G::NPC_ELECTRO };
+    EXPECT_EQ(GnomerOrder(GnomerWing("gnomer-s1")), want);
+}
+
+TEST(DcRunWingTest, GnomereganSectionTwoRunsTheAlertSystemPummelerThermaplugg)
+{
+    std::vector<DungeonBossInfo> const s2 = GnomerWing("gnomer-s2");
+    std::vector<uint32> const want = { G::NPC_ALERT_SYSTEM, G::NPC_PUMMELER, G::NPC_THERMAPLUGG };
+    EXPECT_EQ(GnomerOrder(s2), want);
+    // Section 2 never clicks the Workshop Door: the Alert System's death opens it.
+    for (DungeonBossInfo const& b : s2)
+        EXPECT_NE(b.kind, DungeonAnchorKind::Objective) << b.name;
+}
+
+// The full clear: section 1, then the Workshop Door from the inside (the detour
+// objective shares the Alert System's key and goes first), the Alert System,
+// Pummeler, Thermaplugg.
+TEST(DcRunWingTest, GnomereganFullClearTakesTheAlertDetourThroughTheDoor)
+{
+    std::vector<uint32> const want = { G::NPC_TECHBOT, G::NPC_FALLOUT, G::NPC_ELECTRO,
+                                       DcRoster::OBJ(G::OBJ_WORKSHOP_DOOR), G::NPC_ALERT_SYSTEM,
+                                       G::NPC_PUMMELER, G::NPC_THERMAPLUGG };
+    EXPECT_EQ(GnomerOrder(GnomerWing("gnomer")), want);
+    // Nothing the roster holds is left out of the whole dungeon.
+    EXPECT_EQ(GnomerWing("gnomer").size(), GnomerRoster().size());
+}
+
+TEST(DcRunWingTest, EachGnomereganSectionEndsOnItsOwnLastBoss)
+{
+    DungeonWing const& s1 = *DungeonWingRegistry::FindWing(Gnomer(), "gnomer-s1");
+    DungeonWing const& s2 = *DungeonWingRegistry::FindWing(Gnomer(), "gnomer-s2");
+    DungeonWing const& whole = *DungeonWingRegistry::FindWing(Gnomer(), "gnomer");
+    std::vector<DungeonBossInfo> const l1 = GnomerWing("gnomer-s1");
+    std::vector<DungeonBossInfo> const l2 = GnomerWing("gnomer-s2");
+    std::vector<DungeonBossInfo> const all = GnomerWing("gnomer");
+    EXPECT_TRUE(DcRunWing::TerminalDone(s1, l1, 1u << G::SLOT_ELECTRO, false));
+    EXPECT_FALSE(DcRunWing::TerminalDone(s1, l1, s1.encounterMask & ~(1u << G::SLOT_ELECTRO), false));
+    EXPECT_TRUE(DcRunWing::TerminalDone(s2, l2, 1u << G::SLOT_THERMAPLUGG, false));
+    EXPECT_FALSE(DcRunWing::TerminalDone(s2, l2, s2.encounterMask & ~(1u << G::SLOT_THERMAPLUGG), false));
+    // The other section's end never completes this one; the whole dungeon has no
+    // terminal boss (it ends when its list is clear, Thermaplugg last).
+    EXPECT_FALSE(DcRunWing::TerminalDone(s1, l1, 1u << G::SLOT_THERMAPLUGG, false));
+    EXPECT_FALSE(DcRunWing::TerminalDone(s2, l2, 1u << G::SLOT_ELECTRO, false));
+    EXPECT_FALSE(DcRunWing::TerminalDone(whole, all, 1u << G::SLOT_ELECTRO, false));
+}
+
+// DcRunWing's fallback (no test row, no LFG latch): a party on the Train Depot
+// side runs section 2 (the door behind it is sealed); anywhere else, the whole
+// dungeon. The region never taxes a route or reads as a fence for any run.
+TEST(DcRunWingTest, GnomereganDepotSideFallsBackToSectionTwo)
+{
+    struct Spot
+    {
+        float x, y, z;
+        char const* what;
+        char const* region;
+    };
+    Spot const spots[] = {
+        { -736.51f, 2.71f, -249.99f, "the Depot landing (Finder 320)", "gnomer-s2" },
+        { -753.0f, -4.04f, -252.22f, "the Workshop NPC", "gnomer-s2" },
+        { -762.0f, 55.0f, -257.0f, "the Depot pack of four", "gnomer-s2" },
+        { -810.8f, 141.2f, -268.6f, "the walk down to the hall (y 141)", "gnomer-s2" },
+        { -329.10f, -3.21f, -152.85f, "the entrance (area trigger 324)", nullptr },
+        { -519.92f, -107.67f, -155.87f, "Techbot", nullptr },
+        { -391.0f, 132.0f, -209.1f, "Fallout at C", nullptr },
+        { -552.05f, 502.90f, -216.73f, "Electrocutioner", nullptr },
+        { G::DOOR_INSIDE_X, G::DOOR_INSIDE_Y, G::DOOR_INSIDE_Z, "the Workshop Door's inside", nullptr },
+        { -756.67f, 224.55f, -273.08f, "the Alert System's hall", nullptr },
+        { -814.7f, 172.7f, -273.0f, "pack C in the hall's far arm", nullptr },
+        { G::PUMMELER_FIGHT_X, G::PUMMELER_FIGHT_Y, G::PUMMELER_FIGHT_Z, "Pummeler's pocket", nullptr },
+        { -531.32f, 670.16f, -325.18f, "Thermaplugg", nullptr },
+        { -761.0f, 406.0f, -272.3f, "the junction", nullptr },
+    };
+    for (Spot const& s : spots)
+    {
+        char const* region = DcNavPenaltyRegistry::WingRegionAt(G::MAP_ID, s.x, s.y, s.z);
+        if (s.region)
+        {
+            ASSERT_NE(region, nullptr) << s.what;
+            EXPECT_STREQ(region, s.region) << s.what;
+        }
+        else
+            EXPECT_EQ(region, nullptr) << s.what;
+        EXPECT_EQ(DcRunWing::ResolveFallback(Gnomer(), region), s.region ? s.region : "gnomer") << s.what;
+        for (char const* run : { "", "gnomer", "gnomer-s1", "gnomer-s2" })
+        {
+            EXPECT_FLOAT_EQ(DcNavPenaltyRegistry::PenaltyAt(G::MAP_ID, s.x, s.y, s.z, run), 1.0f)
+                << run << " at " << s.what;
+            EXPECT_FALSE(DcNavPenaltyRegistry::IsInsideRegion(G::MAP_ID, s.x, s.y, s.z, run))
+                << run << " at " << s.what;
+        }
+    }
 }

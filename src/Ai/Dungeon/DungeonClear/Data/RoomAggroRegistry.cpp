@@ -124,6 +124,22 @@ namespace
         { DcZulFarrak::MAP_ID, DcZulFarrak::NPC_UKORZ, DcZulFarrak::UKORZ_ROOM_RADIUS, {}, false, 0.0f, 0.0f,
           DcZulFarrak::UKORZ_ROOM_PULLOUT },
 
+        // Gnomeregan (90), the rework. Not script radii: no boss calls or answers
+        // assistance; the rows clear what two fights would run into (HANDOFF
+        // section 3.12). The numbers are DcGnomeregan::*_ROOM_*.
+        //   Viscous Fallout at area C: the cave units that can wander onto his
+        //     30yd fight floor (36yd, five of them). Pull-out 3.5yd, under the
+        //     Horror 8.9yd out (wander 5), so it is dragged out like the rest.
+        //   Thermaplugg: the console pack on the way in (59.9-63.4yd); far past
+        //     the computed exclusion sphere, so no pull-out.
+        // The rest of the dungeon needs none: Techbot's dish and Electrocutioner's
+        // platform hold no trash; the Alert hall's packs are deleted (S0) and pack
+        // C's patrol never comes within 65yd of him; Pummeler's pocket is empty
+        // and the three stopped patrols stand on the routes to it.
+        { DcGnomeregan::MAP_ID, DcGnomeregan::NPC_FALLOUT, DcGnomeregan::FALLOUT_ROOM_RADIUS, {}, false, 0.0f, 0.0f,
+          DcGnomeregan::FALLOUT_ROOM_PULLOUT },
+        { DcGnomeregan::MAP_ID, DcGnomeregan::NPC_THERMAPLUGG, DcGnomeregan::THERMAPLUGG_ROOM_RADIUS, {} },
+
         // Scholomance (289) has no row: the Marduk / Vectus students are
         // unattackable props now, so there is no room to clear (see
         // ScholomanceEvents.cpp).

@@ -174,7 +174,15 @@ namespace
     // kSections: spawn bounding boxes padded to the starts and exits), with one
     // generous Z band; they are disjoint in XY. t/TestRunWing pins every start,
     // boss spot and portal landing inside its own wing's box.
-    constexpr std::array<DcNavPenaltyVolume, 22> kVolumes = {{
+    //
+    // Gnomeregan (map 90): the Train Depot side, cost 1: a region only, tagged
+    // "gnomer-s2". The interior is connected (the Workshop Door joins the Depot
+    // side to the rest), but the door is sealed until Electrocutioner dies, so a
+    // party standing on the Depot side with no run wing chosen must run section
+    // 2, not the default full clear (whose first boss is behind the sealed door).
+    // The box (DcGnomeregan::DEPOT_REGION_*) holds the landing and the walk to y
+    // 150, short of the hall (y 162 on), and nothing of the main side.
+    constexpr std::array<DcNavPenaltyVolume, 23> kVolumes = {{
         { 229, -134.0f, -406.0f, 33.0f, -118.0f, -374.0f, 56.0f, 40.0f },
         { 229,  -65.5f, -384.0f, 49.4f,  -60.5f, -377.0f, 54.2f, 40.0f },
         { 556,   25.0f,  150.0f, -5.0f,   68.0f,  248.0f, 30.0f, 40.0f },
@@ -209,6 +217,8 @@ namespace
         { 189, 1595.0f, -470.0f, -40.0f, 1995.0f, -295.0f,  80.0f,  1.0f, "sm-arm" },
         // 189 SM: the Cathedral
         { 189,  830.0f, 1290.0f, -40.0f, 1230.0f, 1480.0f,  80.0f,  1.0f, "sm-cath" },
+        // 90 Gnomeregan: the Train Depot side (the landing and the walk to y 150)
+        { 90, -830.0f, -40.0f, -280.0f, -700.0f, 150.0f, -235.0f, 1.0f, "gnomer-s2" },
     }};
 
     // ---- polygonal no-go regions ----------------------------------------
